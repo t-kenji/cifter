@@ -38,7 +38,7 @@ python -m cifter --help
 GitHub Release の `wheel` / `sdist` から install することもできます。
 
 ```sh
-python -m pip install ./cifter_cli-0.2.0-py3-none-any.whl
+python -m pip install ./cifter_cli-0.2.1-py3-none-any.whl
 ```
 
 開発用:
@@ -50,36 +50,88 @@ uv run cift --help
 
 ## Quick Start
 
-サンプルソース:
+サンプルソース `foo.c`:
 
 ```c
-int FooFunction(int x)
+int DecideState(int x)
 {
+    int state = 0;
+    LogStart();
+
     if (x > 0) {
-        return 1;
+        Prepare();
+        state = 1;
+    } else {
+        PrepareFallback();
+        state = 2;
     }
 
-    return 0;
+    Finalize();
+    return state;
 }
 ```
 
-関数全体を抽出:
+まず全体を確認したいときは、関数をそのまま抜きます。
 
 ```sh
-cift function --name FooFunction --source foo.c
+cift function --name DecideState --source foo.c
 ```
 
-出力:
+```text
+1: int DecideState(int x)
+2: {
+3:     int state = 0;
+4:     LogStart();
+5:
+6:     if (x > 0) {
+7:         Prepare();
+8:         state = 1;
+9:     } else {
+10:         PrepareFallback();
+11:         state = 2;
+12:     }
+13:
+14:     Finalize();
+15:     return state;
+16: }
+```
+
+分岐の骨格と、見たい値更新だけを薄く追いたいときは `flow` を使います。
+
+```sh
+cift flow --function DecideState --source foo.c --track state
+```
 
 ```text
-1: int FooFunction(int x)
+1: int DecideState(int x)
 2: {
-3:     if (x > 0) {
-4:         return 1;
-5:     }
-6:
-7:     return 0;
-8: }
+3:     int state = 0;
+6:     if (x > 0) {
+8:         state = 1;
+9:     } else {
+11:         state = 2;
+12:     }
+15:     return state;
+16: }
+```
+
+失敗側や `else` 側の 1 本だけを追って、その後に何が起きるかまで見たいときは `path` を使います。
+
+```sh
+cift path --function DecideState --source foo.c --route 'else'
+```
+
+```text
+1: int DecideState(int x)
+2: {
+6:     if (x > 0) {
+9:     } else {
+10:         PrepareFallback();
+11:         state = 2;
+12:     }
+14:     Finalize();
+15:     return state;
+16: }
 ```
 
 ## Commands
