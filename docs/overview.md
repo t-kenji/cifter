@@ -11,4 +11,6 @@
 - `cli`: Typer ベースの公開 CLI
 
 renderer は人が読む断片コードを返す。
-JSON 出力は v0 の対象外とする。
+JSON 出力は対象外とする。
+
+運用手順は [release.md](/home/tkenji/Repos/cifter/docs/release.md) を参照する。

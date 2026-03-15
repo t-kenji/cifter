@@ -7,14 +7,15 @@
 
 1. この文書
 2. [configuration.md](/home/tkenji/Repos/cifter/docs/specs/configuration.md)
-3. [data-model/overview.md](/home/tkenji/Repos/cifter/docs/specs/data-model/overview.md)
-4. [pipeline/overview.md](/home/tkenji/Repos/cifter/docs/specs/pipeline/overview.md)
-5. [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
+3. [release.md](/home/tkenji/Repos/cifter/docs/specs/release.md)
+4. [data-model/overview.md](/home/tkenji/Repos/cifter/docs/specs/data-model/overview.md)
+5. [pipeline/overview.md](/home/tkenji/Repos/cifter/docs/specs/pipeline/overview.md)
+6. [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
 
 ## 対象範囲
 
 - 対象言語は C/C++ のみ
-- v0 の公開サブコマンドは `function` / `flow` / `path` のみ
+- 公開サブコマンドは `function` / `flow` / `path` のみ
 - 入力は単一の `--source` ファイル 1 個のみ
 - 出力形式は text のみ
 

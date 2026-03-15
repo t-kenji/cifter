@@ -27,6 +27,16 @@ uv sync
 uv run cift --help
 ```
 
+配布物から:
+
+GitHub Release から `wheel` または `sdist` を取得して install します。
+
+```sh
+python -m pip install ./cifter-0.1.0-py3-none-any.whl
+cift --help
+python -m cifter --help
+```
+
 モジュール実行:
 
 ```sh
@@ -34,6 +44,12 @@ uv run python -m cifter --help
 ```
 
 旧 `python -m cift` と `import cift` の互換は提供しません。
+
+install 後の最小確認:
+
+```sh
+cift function --name FooFunction --source examples/demo.c
+```
 
 ## サブコマンド
 

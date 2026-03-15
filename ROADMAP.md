@@ -7,20 +7,20 @@
 
 ## フェーズ 2: 品質保証と配布運用
 
-- GitHub Actions で `uv sync`、`uv run pytest`、`uv run ruff check .`、`uv run ty check .` を実行する
-- Linux を必須対象にする
-- macOS は追加対象として扱う
-- `cift` 実コマンドのインストール後検証を追加する
-- 配布物の動作確認手順を文書化する
-- リリースフローを定義する
-- バージョンポリシーを定義する
-- changelog 運用を定義する
+- Linux + Python 3.12 の必須 CI ゲートを GitHub Actions に構成する
+- 必須 CI で `uv sync --frozen`、`uv run pytest`、`uv run ruff check .`、`uv run ty check .`、`uv build` を実行する
+- 生成 wheel をクリーンな仮想環境へ install し、`cift --help`、`python -m cifter --help`、実コマンド 1 本の smoke を追加する
+- Windows は追加対象として同一 wheel の install smoke のみ行う
+- GitHub Release を正規配布先とし、tag から `wheel` / `sdist` を公開する
+- version、tag、changelog の運用を固定する
+- 配布確認手順とリリース手順を文書化する
 
 完了条件:
 
-- PR ごとに CI が自動実行される
-- 配布物から `cift` が起動できる
-- バージョン更新と変更履歴更新の手順が人間に再現可能である
+- PR ごとに Linux の必須 CI ゲートが自動実行される
+- 配布物から `cift` と `python -m cifter` が起動できる
+- GitHub Release に `wheel` と `sdist` が添付される
+- バージョン更新、tag 作成、変更履歴更新の手順が人間に再現可能である
 
 ## フェーズ 3: 解析精度と堅牢性強化
 

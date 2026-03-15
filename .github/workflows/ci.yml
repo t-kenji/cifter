@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run Ruff
+        run: uv run ruff check .
+
+      - name: Run ty
+        run: uv run ty check .
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Run Linux install smoke
+        run: python tools/install_smoke.py --wheel "dist/*.whl" --source examples/demo.c --function FooFunction
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  windows-smoke:
+    name: windows-smoke
+    needs: linux
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Run Windows install smoke
+        run: python tools/install_smoke.py --wheel "dist/*.whl" --source examples/demo.c --function FooFunction
