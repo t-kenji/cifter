@@ -13,12 +13,35 @@ from cifter.extract_path import extract_path
 from cifter.model import TrackPath
 from cifter.parser import parse_source
 from cifter.render import render_result
+from cifter.version import format_version_output
 
 app = typer.Typer(no_args_is_help=True, help="C/C++ の関数実装を抽出する CLI")
 
 
 def main() -> None:
     app()
+
+
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    typer.echo(format_version_output())
+    raise typer.Exit()
+
+
+@app.callback()
+def common_options(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="バージョンを表示して終了する",
+        ),
+    ] = False,
+) -> None:
+    _ = version
 
 
 SourceOption = Annotated[

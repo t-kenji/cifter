@@ -2,6 +2,8 @@
 
 ## 共通
 
+- `--version` は `cift {version}` を標準出力へ 1 行出力し、終了コード 0 で終了する
+- `--version` 実行時は `--source` やサブコマンドを要求しない
 - `--source PATH` は必須
 - `-D NAME[=VALUE]` は複数回指定可能
 - 出力は行番号付き text

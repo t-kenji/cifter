@@ -28,7 +28,9 @@ python -m pip install cifter-cli
 最小確認:
 
 ```sh
+cift --version
 cift --help
+python -m cifter --version
 python -m cifter --help
 ```
 
@@ -80,6 +82,13 @@ cift function --name FooFunction --source foo.c
 ```
 
 ## Commands
+
+バージョン表示:
+
+```sh
+cift --version
+python -m cifter --version
+```
 
 `function`:
 指定した関数の実装全体をそのまま抽出します。レビュー対象の最小切り出しに向きます。

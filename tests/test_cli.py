@@ -2,13 +2,24 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cifter.cli import app
 
+
+def _read_expected_version() -> str:
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    version = data["project"]["version"]
+    assert isinstance(version, str)
+    return f"cift {version}"
+
+
 runner = CliRunner()
+EXPECTED_VERSION = _read_expected_version()
 
 
 SOURCE = """#define LOCAL_FLAG 1
@@ -409,6 +420,12 @@ def test_cli_help_lists_commands() -> None:
     assert "path" in result.stdout
 
 
+def test_cli_version_prints_project_version() -> None:
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == EXPECTED_VERSION
+
+
 def test_python_module_execution(tmp_path: Path) -> None:
     source = _write(tmp_path, "foo.c", SOURCE)
     result = subprocess.run(
@@ -420,6 +437,17 @@ def test_python_module_execution(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "4: int FooFunction(int command)" in result.stdout
+
+
+def test_python_module_version() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "cifter", "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == EXPECTED_VERSION
 
 
 def _write(tmp_path: Path, name: str, content: str) -> Path:

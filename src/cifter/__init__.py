@@ -1,3 +1,6 @@
 from cifter.cli import main
+from cifter.version import get_version
 
-__all__ = ["main"]
+__version__ = get_version()
+
+__all__ = ["__version__", "main"]

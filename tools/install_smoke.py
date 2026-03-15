@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import venv
 from pathlib import Path
 
@@ -56,11 +57,27 @@ def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _read_expected_version(repo_root: Path) -> str:
+    data = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
+    version = data["project"]["version"]
+    if not isinstance(version, str):
+        raise TypeError("pyproject.toml の project.version は文字列でなければなりません")
+    return version
+
+
+def _assert_stdout(result: subprocess.CompletedProcess[str], expected: str) -> None:
+    if result.stdout.strip() != expected:
+        raise RuntimeError(
+            f"想定外の出力です: expected={expected!r} actual={result.stdout.strip()!r}"
+        )
+
+
 def main() -> None:
     args = _parse_args()
     wheel = _resolve_path(args.wheel)
     source = _resolve_path(args.source)
     repo_root = Path.cwd()
+    expected_version = f"cift {_read_expected_version(repo_root)}"
 
     with tempfile.TemporaryDirectory(prefix="cifter-smoke-") as tempdir:
         venv_dir = Path(tempdir) / "venv"
@@ -71,6 +88,11 @@ def main() -> None:
         _run([str(python), "-m", "pip", "install", str(wheel)], cwd=repo_root)
         _run([str(cift), "--help"], cwd=repo_root)
         _run([str(python), "-m", "cifter", "--help"], cwd=repo_root)
+        _assert_stdout(_run([str(cift), "--version"], cwd=repo_root), expected_version)
+        _assert_stdout(
+            _run([str(python), "-m", "cifter", "--version"], cwd=repo_root),
+            expected_version,
+        )
 
         result = _run(
             [

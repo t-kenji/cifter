@@ -6,6 +6,7 @@
 
 - エントリポイントは `cift`
 - モジュール実行は `python -m cifter`
+- `--version` は `cift {version}` を表示して終了します
 - `--source PATH` は必須です
 - `-D NAME[=VALUE]` は複数回指定できます
 - 出力は行番号付き text です
@@ -46,6 +47,7 @@
 ## 代表例
 
 ```sh
+cift --version
 cift function --name FooFunction --source examples/demo.c
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'

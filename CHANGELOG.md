@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- `cift --version` と `python -m cifter --version` を追加
 - 配布名を `cifter-cli` へ変更し、PyPI 公開向けの project metadata を追加
 - README を利用者向けに再構成し、Quick Start と install 導線を追加
 - 開発者向け `docs/` に CLI、出力、パイプライン、データモデル、アーキテクチャ、release 運用の文書を追加
