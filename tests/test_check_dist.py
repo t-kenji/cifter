@@ -58,11 +58,23 @@ def test_metadata_has_classifiers() -> None:
         "Classifier: Development Status :: 3 - Alpha\n"
         "Classifier: Environment :: Console\n"
         "Classifier: Intended Audience :: Developers\n"
+        "Classifier: Operating System :: OS Independent\n"
+        "Classifier: Programming Language :: Python :: 3\n"
+        "Classifier: Programming Language :: Python :: 3.12\n"
+        "Classifier: Programming Language :: C\n"
+        "Classifier: Programming Language :: C++\n"
+        "Classifier: Topic :: Software Development\n"
     )
     expected = [
         "Development Status :: 3 - Alpha",
         "Environment :: Console",
         "Intended Audience :: Developers",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: C",
+        "Programming Language :: C++",
+        "Topic :: Software Development",
     ]
     assert check_dist._metadata_has_classifiers(metadata, expected)
 

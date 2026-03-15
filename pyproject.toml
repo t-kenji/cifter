@@ -22,7 +22,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -32,6 +31,7 @@ classifiers = [
 ]
 dependencies = [
     "pcpp>=1.30",
+    "rich>=14.3.3",
     "tree-sitter>=0.25.2",
     "tree-sitter-c>=0.24.1",
     "tree-sitter-cpp>=0.23.4",
