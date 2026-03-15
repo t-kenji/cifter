@@ -9,6 +9,7 @@
 - 公開サブコマンドは `function` / `flow` / `path` の 3 つです
 - 出力は元ソースと対応付け可能な行番号付き text です
 - `-D NAME[=VALUE]` により条件分岐前処理を評価できます
+- 出力先が TTY の場合は既定でシンタックスハイライトします
 
 ## Why cifter
 
@@ -156,6 +157,8 @@ cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_B
 
 ```sh
 cift function --name FooFunction --source examples/demo.c
+cift function --name FooFunction --source examples/demo.c --color
+cift function --name FooFunction --source examples/demo.c --no-color
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
 ```

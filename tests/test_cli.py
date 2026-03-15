@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -8,6 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from cifter.cli import app
+from cifter.render import _should_use_color
 
 
 def _read_expected_version() -> str:
@@ -164,6 +166,9 @@ PREPROCESS_NESTED_SOURCE = """int Nested(void)
     return 4;
 }
 """
+
+
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
 def test_function_extracts_full_implementation(tmp_path: Path) -> None:
@@ -420,10 +425,57 @@ def test_cli_help_lists_commands() -> None:
     assert "path" in result.stdout
 
 
+def test_subcommand_help_lists_color_options() -> None:
+    for command in ("function", "flow", "path"):
+        result = runner.invoke(app, [command, "--help"])
+        assert result.exit_code == 0
+        assert "--color" in result.stdout
+        assert "--no-color" in result.stdout
+
+
 def test_cli_version_prints_project_version() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert result.stdout.strip() == EXPECTED_VERSION
+
+
+def test_default_output_does_not_use_ansi_when_stdout_is_not_tty(tmp_path: Path) -> None:
+    source = _write(tmp_path, "foo.c", SOURCE)
+    result = runner.invoke(app, ["function", "--name", "FooFunction", "--source", str(source)])
+    assert result.exit_code == 0
+    assert ANSI_ESCAPE_PATTERN.search(result.stdout) is None
+
+
+def test_color_option_forces_ansi_output(tmp_path: Path) -> None:
+    source = _write(tmp_path, "foo.c", SOURCE)
+    result = runner.invoke(app, ["function", "--name", "FooFunction", "--source", str(source), "--color"])
+    assert result.exit_code == 0
+    assert ANSI_ESCAPE_PATTERN.search(result.stdout) is not None
+    assert "\x1b[2m" in result.stdout
+    assert _strip_ansi(result.stdout).splitlines()[0] == " 4: int FooFunction(int command)"
+
+
+def test_no_color_option_disables_ansi_output(tmp_path: Path) -> None:
+    source = _write(tmp_path, "foo.c", SOURCE)
+    result = runner.invoke(
+        app,
+        ["function", "--name", "FooFunction", "--source", str(source), "--no-color"],
+    )
+    assert result.exit_code == 0
+    assert ANSI_ESCAPE_PATTERN.search(result.stdout) is None
+
+
+def test_should_use_color_prefers_explicit_value_over_tty() -> None:
+    tty_stream = _FakeStream(is_tty=True)
+    non_tty_stream = _FakeStream(is_tty=False)
+
+    assert _should_use_color(True, non_tty_stream) is True
+    assert _should_use_color(False, tty_stream) is False
+
+
+def test_should_use_color_uses_tty_for_auto_mode() -> None:
+    assert _should_use_color(None, _FakeStream(is_tty=True)) is True
+    assert _should_use_color(None, _FakeStream(is_tty=False)) is False
 
 
 def test_python_module_execution(tmp_path: Path) -> None:
@@ -454,3 +506,15 @@ def _write(tmp_path: Path, name: str, content: str) -> Path:
     path = tmp_path / name
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_PATTERN.sub("", text)
+
+
+class _FakeStream:
+    def __init__(self, *, is_tty: bool) -> None:
+        self._is_tty = is_tty
+
+    def isatty(self) -> bool:
+        return self._is_tty

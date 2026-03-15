@@ -10,12 +10,15 @@
 - `--source PATH` は必須です
 - `-D NAME[=VALUE]` は複数回指定できます
 - 出力は行番号付き text です
+- `--color` / `--no-color` は各抽出サブコマンドで指定できます
+- 色指定を省略した場合は、標準出力が TTY のときだけ色付きになります
 
 ## サブコマンド
 
 `function`:
 
 - 必須引数は `--name`
+- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
 - 指定関数の実装全体をそのまま抽出します
 
 `flow`:
@@ -23,12 +26,14 @@
 - 必須引数は `--function`
 - 制御構造の骨格だけを残します
 - `--track` は複数回指定できます
+- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
 - `--track` 一致文は骨格に追加して残します
 
 `path`:
 
 - 必須引数は `--function`
 - 必須引数は `--route`
+- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
 - route は `>` でネストを下る最小 DSL です
 - `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` を扱います
 

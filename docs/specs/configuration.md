@@ -7,18 +7,23 @@
 - `--source PATH` は必須
 - `-D NAME[=VALUE]` は複数回指定可能
 - 出力は行番号付き text
+- 抽出結果出力だけは `--color` / `--no-color` でシンタックスハイライト有無を制御できる
+- `--color` / `--no-color` を省略した場合、標準出力が TTY のときだけ色付きで出力する
+- 色付き出力は ANSI エスケープを含むが、可視文字列の内容と行番号契約は変えない
 - Typer の引数エラーは終了コード 2
 - 抽出失敗、曖昧一致、未一致、DSL 不正は終了コード 1
 
 ## `function`
 
 - 必須引数は `--name`
+- `--color` / `--no-color` を指定可能
 - 指定関数の実装全体をそのまま抽出する
 - 行番号は関数定義の開始行から終了行まで連続で出力する
 
 ## `flow`
 
 - 必須引数は `--function`
+- `--color` / `--no-color` を指定可能
 - 制御構造の骨格だけを残す
 - 保持対象は `if` / `else if` / `else` / `switch` / `case` / `default` / `for` / `while` / `do ... while` / `goto` / `break` / `continue` / `return` / ラベル定義
 - `--track` は複数回指定可能
@@ -28,6 +33,7 @@
 
 - 必須引数は `--function`
 - 必須引数は `--route`
+- `--color` / `--no-color` を指定可能
 - route は `>` でネストを下る最小 DSL
 - 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION`
 - `else if CONDITION` は複合 1 要素として扱う
