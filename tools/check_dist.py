@@ -17,6 +17,11 @@ def _parse_args() -> argparse.Namespace:
         default="MIT",
         help="wheel metadata で期待する license expression",
     )
+    parser.add_argument(
+        "--project-name",
+        default="cifter-cli",
+        help="wheel metadata で期待する project name",
+    )
     return parser.parse_args()
 
 
@@ -58,12 +63,52 @@ def _sdist_has_license_file(sdist_path: Path, license_file: str) -> bool:
 
 
 def _metadata_has_license_expression(metadata: str, expected: str) -> bool:
-    prefix = "License-Expression:"
+    value = _metadata_first_value(metadata, "License-Expression")
+    return value == expected
+
+
+def _metadata_has_name(metadata: str, expected: str) -> bool:
+    value = _metadata_first_value(metadata, "Name")
+    return value == expected
+
+
+def _metadata_has_project_urls(metadata: str, expected_urls: dict[str, str]) -> bool:
+    actual_urls: dict[str, str] = {}
+    for value in _metadata_values(metadata, "Project-URL"):
+        label, separator, url = value.partition(",")
+        if not separator:
+            return False
+        actual_urls[label.strip()] = url.strip()
+    return actual_urls == expected_urls
+
+
+def _metadata_has_keywords(metadata: str, expected_keywords: list[str]) -> bool:
+    value = _metadata_first_value(metadata, "Keywords")
+    if value is None:
+        return False
+    actual_keywords = [keyword.strip() for keyword in value.split(",") if keyword.strip()]
+    return actual_keywords == expected_keywords
+
+
+def _metadata_has_classifiers(metadata: str, expected_classifiers: list[str]) -> bool:
+    actual_classifiers = _metadata_values(metadata, "Classifier")
+    return actual_classifiers == expected_classifiers
+
+
+def _metadata_first_value(metadata: str, field: str) -> str | None:
+    values = _metadata_values(metadata, field)
+    if not values:
+        return None
+    return values[0]
+
+
+def _metadata_values(metadata: str, field: str) -> list[str]:
+    prefix = f"{field}:"
+    values: list[str] = []
     for line in metadata.splitlines():
         if line.startswith(prefix):
-            actual = line.removeprefix(prefix).strip()
-            return actual == expected
-    return False
+            values.append(line.removeprefix(prefix).strip())
+    return values
 
 
 def main() -> None:
@@ -71,12 +116,47 @@ def main() -> None:
     wheel = _resolve_path(args.wheel)
     sdist = _resolve_path(args.sdist)
     metadata = _read_wheel_metadata(wheel)
+    expected_project_urls = {
+        "Homepage": "https://github.com/t-kenji/cifter",
+        "Repository": "https://github.com/t-kenji/cifter",
+        "Issues": "https://github.com/t-kenji/cifter/issues",
+        "Changelog": "https://github.com/t-kenji/cifter/blob/main/CHANGELOG.md",
+    }
+    expected_keywords = [
+        "c",
+        "c++",
+        "cpp",
+        "cli",
+        "tree-sitter",
+        "source-extraction",
+        "static-analysis",
+    ]
+    expected_classifiers = [
+        "Development Status :: 3 - Alpha",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: C",
+        "Programming Language :: C++",
+        "Topic :: Software Development",
+    ]
 
+    if not _metadata_has_name(metadata, args.project_name):
+        raise ValueError(f"wheel metadata の Name が一致しません: expected={args.project_name}")
     if not _metadata_has_license_expression(metadata, args.license_expression):
         raise ValueError(
             "wheel metadata の License-Expression が一致しません: "
             f"expected={args.license_expression}"
         )
+    if not _metadata_has_project_urls(metadata, expected_project_urls):
+        raise ValueError("wheel metadata の Project-URL が一致しません")
+    if not _metadata_has_keywords(metadata, expected_keywords):
+        raise ValueError("wheel metadata の Keywords が一致しません")
+    if not _metadata_has_classifiers(metadata, expected_classifiers):
+        raise ValueError("wheel metadata の Classifier が一致しません")
     if not _wheel_has_license_file(wheel, args.license_file):
         raise ValueError(f"wheel に {args.license_file} が含まれていません")
     if not _sdist_has_license_file(sdist, args.license_file):
@@ -84,7 +164,7 @@ def main() -> None:
 
     print(
         "distribution metadata validated: "
-        f"{wheel.name} / {sdist.name} / {args.license_expression}"
+        f"{wheel.name} / {sdist.name} / {args.project_name} / {args.license_expression}"
     )
 
 

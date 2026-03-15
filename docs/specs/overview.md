@@ -21,9 +21,10 @@
 
 ## 命名方針
 
-- 配布名は `cifter`
+- 配布名は `cifter-cli`
 - 実行コマンドは `cift`
 - Python モジュール実行は `python -m cifter`
+- import package は `cifter`
 - 旧 Python パッケージ名 `cift` の互換は提供しない
 
 ## トレーサビリティ原則

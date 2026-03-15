@@ -1,16 +1,29 @@
 # 開発者向け概要
 
-実装は次の責務分割を前提にする。
+`docs/specs/` は実行可能仕様の正本であり、この `docs/` は実装理解と運用理解のための開発者向け補助文書です。仕様判断は先に `docs/specs/` を確認し、その後に本ディレクトリで実装構造を追います。
 
+## 文書一覧
+
+- [cli.md](/home/tkenji/Repos/cifter/docs/cli.md): 公開コマンド、オプション、終了コード、代表的な失敗
+- [output-format.md](/home/tkenji/Repos/cifter/docs/output-format.md): 行番号付き text 出力の契約
+- [pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md): 前処理からレンダリングまでの処理順と責務
+- [data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md): 抽出結果と route / track 周辺の主要データ型
+- [architecture.md](/home/tkenji/Repos/cifter/docs/architecture.md): モジュール責務と依存方向
+- [release.md](/home/tkenji/Repos/cifter/docs/release.md): release 手順と PyPI publish 運用
+
+## 実装の見取り図
+
+- `cli`: Typer ベースの公開エントリポイント
 - `preprocessor`: 条件分岐前処理
-- `parser`: tree-sitter 解析と関数探索
-- `extract_function`: 関数本体抽出
+- `parser`: tree-sitter 解析、言語判定、関数探索
+- `extract_function`: 関数全体抽出
 - `extract_flow`: 制御骨格抽出
-- `extract_path`: 親構造と直列文脈を保ちながらの route 抽出
+- `extract_path`: route 抽出
 - `render`: 行番号付き text レンダリング
-- `cli`: Typer ベースの公開 CLI
+- `model`: 入出力モデルと DSL 正規化
+- `errors`: 利用者向け失敗メッセージ
 
-renderer は人が読む断片コードを返す。
-JSON 出力は対象外とする。
+## 参照順
 
-運用手順は [release.md](/home/tkenji/Repos/cifter/docs/release.md) を参照する。
+- 正本仕様: [docs/specs/overview.md](/home/tkenji/Repos/cifter/docs/specs/overview.md)
+- 開発者運用: [release.md](/home/tkenji/Repos/cifter/docs/release.md)

@@ -1,5 +1,5 @@
 [project]
-name = "cifter"
+name = "cifter-cli"
 version = "0.1.0"
 description = "C/C++ の関数実装を抽出する軽量 CLI"
 readme = "README.md"
@@ -9,6 +9,27 @@ authors = [
     { name = "t-kenji", email = "protect.2501@gmail.com" }
 ]
 requires-python = ">=3.12"
+keywords = [
+    "c",
+    "c++",
+    "cpp",
+    "cli",
+    "tree-sitter",
+    "source-extraction",
+    "static-analysis",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C",
+    "Programming Language :: C++",
+    "Topic :: Software Development",
+]
 dependencies = [
     "pcpp>=1.30",
     "tree-sitter>=0.25.2",
@@ -17,12 +38,21 @@ dependencies = [
     "typer>=0.24.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/t-kenji/cifter"
+Repository = "https://github.com/t-kenji/cifter"
+Issues = "https://github.com/t-kenji/cifter/issues"
+Changelog = "https://github.com/t-kenji/cifter/blob/main/CHANGELOG.md"
+
 [project.scripts]
 cift = "cifter:main"
 
 [build-system]
 requires = ["uv_build>=0.10.10,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "cifter"
 
 [dependency-groups]
 dev = [

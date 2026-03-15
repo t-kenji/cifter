@@ -4,7 +4,9 @@
 
 ## [Unreleased]
 
-- 変更なし
+- 配布名を `cifter-cli` へ変更し、PyPI 公開向けの project metadata を追加
+- README を利用者向けに再構成し、Quick Start と install 導線を追加
+- 開発者向け `docs/` に CLI、出力、パイプライン、データモデル、アーキテクチャ、release 運用の文書を追加
 
 ## [0.1.0] - 2026-03-16
 

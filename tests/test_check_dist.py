@@ -26,6 +26,47 @@ def test_metadata_has_license_expression() -> None:
     assert check_dist._metadata_has_license_expression(metadata, "MIT")
 
 
+def test_metadata_has_name() -> None:
+    metadata = "Metadata-Version: 2.4\nName: cifter-cli\n"
+    assert check_dist._metadata_has_name(metadata, "cifter-cli")
+
+
+def test_metadata_has_project_urls() -> None:
+    metadata = (
+        "Project-URL: Homepage, https://github.com/t-kenji/cifter\n"
+        "Project-URL: Repository, https://github.com/t-kenji/cifter\n"
+        "Project-URL: Issues, https://github.com/t-kenji/cifter/issues\n"
+        "Project-URL: Changelog, https://github.com/t-kenji/cifter/blob/main/CHANGELOG.md\n"
+    )
+    expected = {
+        "Homepage": "https://github.com/t-kenji/cifter",
+        "Repository": "https://github.com/t-kenji/cifter",
+        "Issues": "https://github.com/t-kenji/cifter/issues",
+        "Changelog": "https://github.com/t-kenji/cifter/blob/main/CHANGELOG.md",
+    }
+    assert check_dist._metadata_has_project_urls(metadata, expected)
+
+
+def test_metadata_has_keywords() -> None:
+    metadata = "Keywords: c,c++,cpp,cli,tree-sitter,source-extraction,static-analysis\n"
+    expected = ["c", "c++", "cpp", "cli", "tree-sitter", "source-extraction", "static-analysis"]
+    assert check_dist._metadata_has_keywords(metadata, expected)
+
+
+def test_metadata_has_classifiers() -> None:
+    metadata = (
+        "Classifier: Development Status :: 3 - Alpha\n"
+        "Classifier: Environment :: Console\n"
+        "Classifier: Intended Audience :: Developers\n"
+    )
+    expected = [
+        "Development Status :: 3 - Alpha",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+    ]
+    assert check_dist._metadata_has_classifiers(metadata, expected)
+
+
 def test_metadata_requires_expected_license_expression() -> None:
     metadata = "Metadata-Version: 2.4\nLicense-Expression: Apache-2.0\n"
     assert not check_dist._metadata_has_license_expression(metadata, "MIT")

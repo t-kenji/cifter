@@ -1,24 +1,42 @@
 # cifter
 
-`cifter` は、C/C++ の関数実装を機械的かつ高速に抽出する CLI です。重い推論や意味解析は行わず、`tree-sitter` ベースで読める範囲を整理して返します。
+`cifter` は、C/C++ の関数実装を機械的かつ高速に抽出する CLI です。
+`tree-sitter` で構文を捉え、行番号付き text として返します。重い意味解析や LLM 連携は行いません。
 
-## v0 の対象
+## 概要
 
-- 単一 `--source` ファイルからの抽出
-- `function` / `flow` / `path` の 3 サブコマンド
-- 行番号付き text 出力
-- `-D NAME[=VALUE]` による条件分岐評価
+- 単一の `--source` ファイルから抽出します
+- 公開サブコマンドは `function` / `flow` / `path` の 3 つです
+- 出力は元ソースと対応付け可能な行番号付き text です
+- `-D NAME[=VALUE]` により条件分岐前処理を評価できます
 
-## non-goals
+## Why cifter
 
-- ディレクトリ走査
-- JSON 出力
-- LLM 連携
-- 意味解析
-- データフロー解析
-- CFG 構築
+- 関数全体をそのまま抜き出したい
+- 分岐の骨格だけを見たい
+- 特定の route だけを細く追いたい
+- 元の行番号を失わずにレビューや調査へ貼りたい
 
-## インストールと実行
+## Installation
+
+PyPI から install:
+
+```sh
+python -m pip install cifter-cli
+```
+
+最小確認:
+
+```sh
+cift --help
+python -m cifter --help
+```
+
+GitHub Release の `wheel` / `sdist` から install することもできます。
+
+```sh
+python -m pip install ./cifter_cli-0.1.0-py3-none-any.whl
+```
 
 開発用:
 
@@ -27,96 +45,126 @@ uv sync
 uv run cift --help
 ```
 
-配布物から:
+## Quick Start
 
-GitHub Release から `wheel` または `sdist` を取得して install します。
+サンプルソース:
 
-```sh
-python -m pip install ./cifter-0.1.0-py3-none-any.whl
-cift --help
-python -m cifter --help
+```c
+int FooFunction(int x)
+{
+    if (x > 0) {
+        return 1;
+    }
+
+    return 0;
+}
 ```
 
-モジュール実行:
+関数全体を抽出:
 
 ```sh
-uv run python -m cifter --help
+cift function --name FooFunction --source foo.c
 ```
 
-旧 `python -m cift` と `import cift` の互換は提供しません。
+出力:
 
-install 後の最小確認:
+```text
+1: int FooFunction(int x)
+2: {
+3:     if (x > 0) {
+4:         return 1;
+5:     }
+6:
+7:     return 0;
+8: }
+```
+
+## Commands
+
+`function`:
+指定した関数の実装全体をそのまま抽出します。レビュー対象の最小切り出しに向きます。
 
 ```sh
 cift function --name FooFunction --source examples/demo.c
 ```
 
-## サブコマンド
-
-`function`:
-指定した関数の実装全体をそのまま抽出します。
-
-```sh
-uv run cift function --name FooFunction --source examples/demo.c
-```
-
 `flow`:
-制御構造の骨格だけを残します。`--track` で完全一致した文を追加保持します。
+制御構造の骨格だけを残します。`--track` を付けると、完全一致したアクセスパスを含む文を追加保持します。
 
 ```sh
-uv run cift flow --function FooFunction --source examples/demo.c --track state
-uv run cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
+cift flow --function FooFunction --source examples/demo.c --track state
+cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 ```
 
 `path`:
-指定した分岐経路だけを細く取り出します。親構造は残し、route が終端に達したコンテナでは後続の通常文も残します。
+指定した route だけを細く抽出します。親構造は残し、route 終端に達したコンテナでは後続の通常文も残します。
 
 ```sh
-uv run cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > if ret == OK'
-uv run cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if ret == 11'
-uv run cift path --function FlowOnlySample --source examples/demo.c --route 'else'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > if ret == OK'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'
+cift path --function ElseRoute --source examples/demo.c --route 'else'
 ```
 
-## `-D` / `--track` / `--route`
+## Preprocessor / Track / Route
 
 `-D`:
+条件分岐前処理の評価に使うマクロを追加します。
 
 ```sh
-uv run cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_BAR=1
+cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_BAR=1
 ```
 
 `--track`:
+`flow` で保持したいアクセスパスです。構文上の完全一致だけを扱います。
 
 - `state`
 - `ctx->state`
 - `a->b.c`
 
 `--route`:
+`path` で辿る最小 DSL です。
 
 - `case CMD_HOGE`
 - `case CMD_HOGE > if ret == OK`
-- `case CMD_HOGE > else if ret == 11`
+- `case CMD_HOGE > else if errno == EINT`
 - `default`
 - `else`
 
-## 既知制約
+## Limitations
 
-- 入力は UTF-8 前提です
+- 対象は C/C++ のみです
+- 入力は単一ファイルのみです
+- 出力形式は text のみです
+- 入力文字コードは UTF-8 前提です
 - `.h` は現状 C 扱いです
-- `--route` は `case` / `default` / `if` / `else` / `else if` のみ対応します
-- ループ経路、`goto` 横断、意味解析は v0 の対象外です
-- `--track` は構文上の完全一致のみを扱い、名前解決やスコープ解析は行いません
+- `--route` は `case` / `default` / `if` / `else` / `else if` のみ対応です
+- `--track` は名前解決やスコープ解析を行いません
+- ループ経路、`goto` 横断、意味解析、CFG 構築、JSON 出力は対象外です
 
-## サンプル
+## Examples
 
-`examples/demo.c` に、`function` / `flow` / `path` と条件分岐前処理を試すためのサンプルを置いています。
+リポジトリには `examples/demo.c` を含めています。
 
 ```sh
-uv run cift function --name FooFunction --source examples/demo.c
-uv run cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-uv run cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
+cift function --name FooFunction --source examples/demo.c
+cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
 ```
+
+## Development
+
+開発者向け文書は `docs/` にまとめています。
+
+- [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
+- [docs/cli.md](/home/tkenji/Repos/cifter/docs/cli.md)
+- [docs/output-format.md](/home/tkenji/Repos/cifter/docs/output-format.md)
+- [docs/pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md)
+- [docs/data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md)
+- [docs/architecture.md](/home/tkenji/Repos/cifter/docs/architecture.md)
+- [docs/release.md](/home/tkenji/Repos/cifter/docs/release.md)
+
+仕様の正本は `docs/specs/` にあります。
 
 ## License
 
-このリポジトリは MIT License で配布します。詳細は `LICENSE` を参照してください。
+MIT License で配布します。詳細は `LICENSE` を参照してください。
