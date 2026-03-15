@@ -1,0 +1,54 @@
+[project]
+name = "cifter"
+version = "0.1.0"
+description = "C/C++ の関数実装を抽出する軽量 CLI"
+readme = "README.md"
+authors = [
+    { name = "t-kenji", email = "protect.2501@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pcpp>=1.30",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-c>=0.24.1",
+    "tree-sitter-cpp>=0.23.4",
+    "typer>=0.24.1",
+]
+
+[project.scripts]
+cift = "cifter:main"
+
+[build-system]
+requires = ["uv_build>=0.10.10,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.6",
+    "ty>=0.0.23",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["examples/*"]
+
+[tool.ruff.lint]
+extend-select = [
+    "B",
+    "I",
+    "RUF",
+    "SIM",
+    "UP"
+]
+
+[tool.ty.rules]
+possibly-unresolved-reference = "warn"
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["./src"]
+
+[tool.ty.src]
+exclude = ["examples/*"]
