@@ -116,3 +116,7 @@ uv run cift function --name FooFunction --source examples/demo.c
 uv run cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 uv run cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
 ```
+
+## License
+
+このリポジトリは MIT License で配布します。詳細は `LICENSE` を参照してください。

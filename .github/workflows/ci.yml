@@ -41,6 +41,9 @@ jobs:
       - name: Build distributions
         run: uv build
 
+      - name: Validate distributions
+        run: python tools/check_dist.py --wheel "dist/*.whl" --sdist "dist/*.tar.gz"
+
       - name: Run Linux install smoke
         run: python tools/install_smoke.py --wheel "dist/*.whl" --source examples/demo.c --function FooFunction
 

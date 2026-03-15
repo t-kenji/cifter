@@ -7,12 +7,16 @@
 - すべてのリリースで `wheel` と `sdist` を生成する
 - 正規配布先は GitHub Release のみとする
 - PyPI 公開は正規配布の対象外とする
+- 正規ライセンスは MIT とする
+- ルートの `LICENSE` を配布物へ同梱する
+- 配布メタデータに MIT を明示する
 - 配布物から利用者が `cift` を起動できることを保証対象に含める
 
 ## CI 対象
 
 - 必須対象は Linux + Python 3.12 とする
 - Linux の必須 CI は `uv sync --frozen`、`uv run pytest`、`uv run ruff check .`、`uv run ty check .`、`uv build` を順に実行する
+- Linux の必須 CI は build 後に生成 `wheel` / `sdist` について `LICENSE` 同梱と MIT メタデータを検証する
 - Linux の必須 CI は build 後に生成 wheel をクリーンな仮想環境へ install し、`cift --help`、`python -m cifter --help`、実コマンド 1 本の smoke を行う
 - Windows は追加対象とし、同じ wheel に対する install smoke のみを行う
 - Windows の結果は互換性観測用であり、release の必須ゲートには含めない

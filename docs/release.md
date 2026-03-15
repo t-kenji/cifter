@@ -26,4 +26,5 @@
 
 - GitHub Release に対象 version の `wheel` と `sdist` が両方ある
 - release workflow の version / changelog 整合チェックが成功している
+- release workflow の配布物検証で `wheel` / `sdist` への `LICENSE` 同梱と MIT メタデータ確認が成功している
 - Windows smoke は互換性観測用として結果を確認する
