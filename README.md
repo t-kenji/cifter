@@ -38,7 +38,7 @@ python -m cifter --help
 GitHub Release の `wheel` / `sdist` から install することもできます。
 
 ```sh
-python -m pip install ./cifter_cli-0.1.0-py3-none-any.whl
+python -m pip install ./cifter_cli-0.2.0-py3-none-any.whl
 ```
 
 開発用:

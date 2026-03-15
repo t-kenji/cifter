@@ -1,6 +1,6 @@
 [project]
 name = "cifter-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "C/C++ の関数実装を抽出する軽量 CLI"
 readme = "README.md"
 license = "MIT"
