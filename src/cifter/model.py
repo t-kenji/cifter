@@ -72,6 +72,18 @@ class RouteSegment:
             )
         if value == "else":
             return cls(kind="else", raw=value)
+        if value == "for":
+            return cls(kind="for", raw=value)
+        if value.startswith("do while "):
+            condition = value[9:].strip()
+            if not condition:
+                raise CiftError(f"不正な --route 要素です: {raw}")
+            return cls(kind="do_while", raw=value, condition=normalize_condition_text(condition))
+        if value.startswith("while "):
+            condition = value[6:].strip()
+            if not condition:
+                raise CiftError(f"不正な --route 要素です: {raw}")
+            return cls(kind="while", raw=value, condition=normalize_condition_text(condition))
         if value.startswith("if "):
             condition = value[3:].strip()
             if not condition:
@@ -138,5 +150,15 @@ def _split_route(route: str) -> list[str]:
 def _starts_route_segment(value: str) -> bool:
     return any(
         value.startswith(prefix)
-        for prefix in ("case ", "default", "if ", "else ", "else", "else if ")
+        for prefix in (
+            "case ",
+            "default",
+            "if ",
+            "else ",
+            "else",
+            "else if ",
+            "for",
+            "while ",
+            "do while ",
+        )
     )

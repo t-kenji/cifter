@@ -36,13 +36,15 @@
 - 必須引数は `--route`
 - `--color` / `--no-color` を指定可能
 - route は `>` でネストを下る最小 DSL
-- 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION`
+- 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION`
 - `else if CONDITION` は複合 1 要素として扱う
 - `else > if CONDITION` は DSL 不正として扱う
 - 選択した枝の内部にある通常文は残す
 - route が終端に達したコンテナでは、その後に直列で続く通常文を残す
 - `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
+- `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索できる
+- route の探索対象は常に現在コンテナの直下文だけで、loop や branch を暗黙にはまたがない
 
 例:
 
@@ -123,4 +125,40 @@ cift path --function FooFunction --source foo.c --route 'case CMD_HOGE > else if
 17:             state = RETRY;
 18:             return -2;
 19:         }
+```
+
+```c
+int LoopRoute(int sts)
+{
+    if (status == BAR) {
+    } else {
+        for (;;) {
+            switch (sts) {
+            case STS_IDLE:
+                Work();
+                break;
+            }
+        }
+    }
+}
+```
+
+```sh
+cift path --function LoopRoute --source loop_route.c --route 'else > for > case STS_IDLE'
+```
+
+```text
+1: int LoopRoute(int sts)
+2: {
+3:     if (status == BAR) {
+4:     } else {
+5:         for (;;) {
+6:             switch (sts) {
+7:             case STS_IDLE:
+8:                 Work();
+9:                 break;
+10:             }
+11:         }
+12:     }
+13: }
 ```

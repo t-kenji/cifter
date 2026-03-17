@@ -153,6 +153,68 @@ AMBIGUOUS_SOURCE = """int Ambiguous(int x)
 """
 
 
+LOOP_PATH_SOURCE = """int LoopRoute(int sts)
+{
+    if (status == BAR) {
+    } else {
+        if (POWER == ON) {
+        } else {
+        }
+        for (;;) {
+            if (result == OK) {
+            } else {
+            }
+            if (res == NG) break;
+            switch (sts) {
+            case STS_IDLE:
+                Work();
+                break;
+            }
+        }
+    }
+}
+"""
+
+
+WHILE_ROUTE_SOURCE = """int WhileRoute(int sts)
+{
+    while ((sts > 0)) {
+        switch (sts) {
+        case STS_IDLE:
+            Work();
+            break;
+        }
+    }
+}
+"""
+
+
+DO_WHILE_ROUTE_SOURCE = """int DoWhileRoute(int sts)
+{
+    do {
+        switch (sts) {
+        case STS_IDLE:
+            Work();
+            break;
+        }
+    } while ((sts > 0));
+}
+"""
+
+
+AMBIGUOUS_FOR_SOURCE = """int AmbiguousFor(void)
+{
+    for (;;) {
+        First();
+    }
+
+    for (;;) {
+        Second();
+    }
+}
+"""
+
+
 PREPROCESS_SOURCE = """int Flagged(void)
 {
 #if defined(DEF_FOO)
@@ -451,6 +513,81 @@ def test_path_supports_default_route_inside_case_block(tmp_path: Path) -> None:
     assert "case REQ_A" not in result.stdout
 
 
+def test_path_supports_loop_segment_before_case_route(tmp_path: Path) -> None:
+    source = _write(tmp_path, "loop_route.c", LOOP_PATH_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "LoopRoute",
+            "--source",
+            str(source),
+            "--route",
+            "else > for > case STS_IDLE",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "3:     if (status == BAR) {" in result.stdout
+    assert "4:     } else {" in result.stdout
+    assert "8:         for (;;) {" in result.stdout
+    assert "13:             switch (sts) {" in result.stdout
+    assert "14:             case STS_IDLE:" in result.stdout
+    assert "15:                 Work();" in result.stdout
+    assert "16:                 break;" in result.stdout
+    assert "18:         }" in result.stdout
+    assert "POWER == ON" not in result.stdout
+    assert "result == OK" not in result.stdout
+    assert "res == NG" not in result.stdout
+
+
+def test_path_supports_while_segment_before_case_route(tmp_path: Path) -> None:
+    source = _write(tmp_path, "while_route.c", WHILE_ROUTE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "WhileRoute",
+            "--source",
+            str(source),
+            "--route",
+            "while sts > 0 > case STS_IDLE",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "3:     while ((sts > 0)) {" in result.stdout
+    assert "4:         switch (sts) {" in result.stdout
+    assert "5:         case STS_IDLE:" in result.stdout
+    assert "6:             Work();" in result.stdout
+    assert "7:             break;" in result.stdout
+    assert "8:         }" in result.stdout
+
+
+def test_path_supports_do_while_segment_before_case_route(tmp_path: Path) -> None:
+    source = _write(tmp_path, "do_while_route.c", DO_WHILE_ROUTE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "DoWhileRoute",
+            "--source",
+            str(source),
+            "--route",
+            "do while sts > 0 > case STS_IDLE",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "3:     do {" in result.stdout
+    assert "4:         switch (sts) {" in result.stdout
+    assert "5:         case STS_IDLE:" in result.stdout
+    assert "6:             Work();" in result.stdout
+    assert "7:             break;" in result.stdout
+    assert "8:         }" in result.stdout
+    assert "9:     } while ((sts > 0));" in result.stdout
+
+
 def test_invalid_route_fails(tmp_path: Path) -> None:
     source = _write(tmp_path, "foo.c", SOURCE)
     result = runner.invoke(
@@ -469,6 +606,24 @@ def test_invalid_route_fails(tmp_path: Path) -> None:
     assert "else if" in result.stderr
 
 
+def test_path_does_not_skip_loop_implicitly(tmp_path: Path) -> None:
+    source = _write(tmp_path, "loop_route.c", LOOP_PATH_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "LoopRoute",
+            "--source",
+            str(source),
+            "--route",
+            "else > case STS_IDLE",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "見つかりません" in result.stderr
+
+
 def test_ambiguous_route_fails(tmp_path: Path) -> None:
     source = _write(tmp_path, "ambiguous.c", AMBIGUOUS_SOURCE)
     result = runner.invoke(
@@ -481,6 +636,24 @@ def test_ambiguous_route_fails(tmp_path: Path) -> None:
             str(source),
             "--route",
             "if x > 0",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "複数" in result.stderr
+
+
+def test_ambiguous_for_route_fails(tmp_path: Path) -> None:
+    source = _write(tmp_path, "ambiguous_for.c", AMBIGUOUS_FOR_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "AmbiguousFor",
+            "--source",
+            str(source),
+            "--route",
+            "for",
         ],
     )
     assert result.exit_code == 1

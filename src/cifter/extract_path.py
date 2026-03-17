@@ -65,14 +65,18 @@ def _collect_path_from_container(
             rendered[body.end_point.row + 1] = parsed.source.line_text(body.end_point.row + 1)
         return
 
-    _render_if_context(rendered, parsed, match)
+    if match.kind in {"if", "else", "else_if"}:
+        _render_if_context(rendered, parsed, match)
+    else:
+        _render_loop_context(rendered, parsed, match)
+
     if len(segments) == 1:
-        _keep_branch_body(rendered, parsed, match)
+        _keep_match_body(rendered, parsed, match)
         _keep_linear_statements(rendered, parsed, statements[match.owner_index + 1 :])
         return
 
     _collect_path_from_container(parsed, match.branch, segments[1:], rendered)
-    _keep_branch_closing(rendered, parsed, match)
+    _keep_match_closing(rendered, parsed, match)
 
 
 def _find_unique_match(parsed: ParsedSource, container: Node, segment: RouteSegment) -> _RouteMatch:
@@ -114,6 +118,47 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
                             selected_start_byte=case_statement.start_byte,
                         )
                     )
+        if segment.kind == "for" and statement.type == "for_statement":
+            matches.append(
+                _RouteMatch(
+                    owner=statement,
+                    owner_index=index,
+                    kind="for",
+                    branch=statement.named_children[-1],
+                    header_start_line=statement.start_point.row + 1,
+                    header_end_line=statement.named_children[-1].start_point.row + 1,
+                )
+            )
+        if (
+            segment.kind == "while"
+            and statement.type == "while_statement"
+            and _normalized_while_condition(parsed, statement) == segment.condition
+        ):
+            matches.append(
+                _RouteMatch(
+                    owner=statement,
+                    owner_index=index,
+                    kind="while",
+                    branch=statement.named_children[-1],
+                    header_start_line=statement.start_point.row + 1,
+                    header_end_line=statement.named_children[-1].start_point.row + 1,
+                )
+            )
+        if (
+            segment.kind == "do_while"
+            and statement.type == "do_statement"
+            and _normalized_do_while_condition(parsed, statement) == segment.condition
+        ):
+            matches.append(
+                _RouteMatch(
+                    owner=statement,
+                    owner_index=index,
+                    kind="do_while",
+                    branch=statement.named_children[0],
+                    header_start_line=statement.start_point.row + 1,
+                    header_end_line=statement.named_children[0].start_point.row + 1,
+                )
+            )
         if statement.type != "if_statement":
             continue
         if segment.kind == "if" and _normalized_if_condition(parsed, statement) == segment.condition:
@@ -191,19 +236,24 @@ def _final_else_match(if_node: Node, owner_index: int) -> _RouteMatch | None:
         )
 
 
-def _keep_branch_body(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
+def _keep_match_body(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
     if match.kind == "case":
         _keep_full_statement(rendered, parsed, match.branch)
         return
     branch = match.branch
     if branch.type == "compound_statement":
         _keep_original_range(rendered, parsed, branch.start_point.row + 1, branch.end_point.row + 1)
-        _keep_branch_closing(rendered, parsed, match)
+        _keep_match_closing(rendered, parsed, match)
         return
     _keep_original_range(rendered, parsed, branch.start_point.row + 1, branch.end_point.row + 1)
+    if match.kind == "do_while":
+        rendered[match.owner.end_point.row + 1] = parsed.source.line_text(match.owner.end_point.row + 1)
 
 
-def _keep_branch_closing(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
+def _keep_match_closing(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
+    if match.kind == "do_while":
+        rendered[match.owner.end_point.row + 1] = parsed.source.line_text(match.owner.end_point.row + 1)
+        return
     _keep_compound_closing(rendered, parsed, match.branch, match.trim_end_byte)
 
 
@@ -258,6 +308,10 @@ def _render_if_context(rendered: dict[int, str], parsed: ParsedSource, match: _R
             _trim_end_byte(alternative, consequence),
         )
         current = alternative
+
+
+def _render_loop_context(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
+    _keep_original_range(rendered, parsed, match.header_start_line, match.header_end_line)
 
 
 def _keep_compound_closing(
@@ -336,6 +390,16 @@ def _is_default_case(case_node: Node) -> bool:
 
 def _normalized_if_condition(parsed: ParsedSource, if_node: Node) -> str:
     condition_node = if_node.named_children[0]
+    return normalize_condition_text(condition_text(parsed.source, condition_node))
+
+
+def _normalized_while_condition(parsed: ParsedSource, while_node: Node) -> str:
+    condition_node = while_node.named_children[0]
+    return normalize_condition_text(condition_text(parsed.source, condition_node))
+
+
+def _normalized_do_while_condition(parsed: ParsedSource, do_node: Node) -> str:
+    condition_node = do_node.named_children[1]
     return normalize_condition_text(condition_text(parsed.source, condition_node))
 
 

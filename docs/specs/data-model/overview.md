@@ -19,13 +19,17 @@
 - `if CONDITION`
 - `else`
 - `else if CONDITION`
+- `for`
+- `while CONDITION`
+- `do while CONDITION`
 
 ### 条件比較
 
-- `if CONDITION` と `else if CONDITION` の `CONDITION` は外側丸括弧と空白だけ正規化する
+- `if CONDITION` / `else if CONDITION` / `while CONDITION` / `do while CONDITION` の `CONDITION` は外側丸括弧と空白だけ正規化する
 - それ以外の意味同値性は扱わない
 
 ### 一致方針
 
 - route 各段で一致候補はちょうど 1 個でなければならない
 - 0 個または複数候補なら失敗する
+- 探索対象は常に現在コンテナの直下文だけで、子孫ノードは暗黙探索しない

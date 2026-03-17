@@ -30,6 +30,8 @@
 - `path` は親構造の開閉と元行番号を維持したまま、非選択枝だけを落とす
 - `path` の `case` / `default` も、必要なら直下の `{ ... }` を中間コンテナとして探索と描画を行う
 - `else if CONDITION` は AST 上の `else_clause` 直下 `if_statement` を 1 要素として照合する
+- `path` の `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索と描画を行う
+- `path` は route の各段で現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたがない
 
 ## レンダーと出力
 

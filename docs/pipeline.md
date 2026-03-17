@@ -34,6 +34,8 @@
 - 選択枝のみを残し、親構造と route 終端以降の直列文脈を保ちます
 - `case` / `default` 直下が `{ ... }` ブロックでも、その内側を探索対象に含めて元の開閉を残します
 - `else if` は `else_clause` 直下の `if_statement` を 1 要素として扱います
+- `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索と描画を行います
+- route の各段では現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたぎません
 
 ## 6. render
 
