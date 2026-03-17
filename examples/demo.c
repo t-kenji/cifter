@@ -80,12 +80,13 @@ int FooFunction(AppContext *ctx, int command)
         }
 
     case CMD_FUGA:
-        ret = DoFuga(ctx);
-        if (ret != OK) {
-            goto ERROR_EXIT;
+        {
+            ret = DoFuga(ctx);
+            if (ret != OK) {
+                goto ERROR_EXIT;
+            }
+            break;
         }
-        break;
-
     case CMD_LOOP:
         for (i = 0; i < 4; i++) {
             if (i == 1) {
