@@ -106,11 +106,15 @@ cift flow --function DecideState --source foo.c --track state
 1: int DecideState(int x)
 2: {
 3:     int state = 0;
+        ...
 6:     if (x > 0) {
+            ...
 8:         state = 1;
 9:     } else {
+            ...
 11:         state = 2;
 12:     }
+        ...
 15:     return state;
 16: }
 ```
@@ -124,11 +128,14 @@ cift path --function DecideState --source foo.c --route 'else'
 ```text
 1: int DecideState(int x)
 2: {
+        ...
 6:     if (x > 0) {
+            ...
 9:     } else {
 10:         PrepareFallback();
 11:         state = 2;
 12:     }
+        ...
 14:     Finalize();
 15:     return state;
 16: }

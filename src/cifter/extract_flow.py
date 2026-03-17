@@ -3,6 +3,7 @@ from __future__ import annotations
 from tree_sitter import Node
 
 from cifter.model import ExtractedLine, ExtractionResult, InlineHighlightSpan, TrackPath
+from cifter.omission import attach_omission_markers
 from cifter.parser import ParsedSource, find_function, function_body, node_text
 
 CONTROL_TYPES = {
@@ -55,6 +56,7 @@ def extract_flow(
         )
         for line_no in line_numbers
     )
+    lines = attach_omission_markers(parsed.source, lines)
     return ExtractionResult(span=parsed.source.span_for_lines(line_numbers), lines=lines)
 
 

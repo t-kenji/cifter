@@ -12,11 +12,12 @@
 
 ## ExtractedLine
 
-`ExtractedLine(line_no, text, highlights)` は 1 行分の表示単位です。
+`ExtractedLine(line_no, text, highlights, omitted_after_indent)` は 1 行分の表示単位です。
 
 - `line_no`: 1-based 行番号
 - `text`: その行の表示内容
 - `highlights`: 色付き出力時にだけ使う行内強調範囲
+- `omitted_after_indent`: 直後に `...` を差し込むときのコード側インデント
 
 ## InlineHighlightSpan
 

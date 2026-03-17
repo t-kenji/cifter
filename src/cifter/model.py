@@ -29,6 +29,7 @@ class ExtractedLine:
     line_no: int
     text: str
     highlights: tuple[InlineHighlightSpan, ...] = ()
+    omitted_after_indent: str | None = None
 
 
 @dataclass(frozen=True)

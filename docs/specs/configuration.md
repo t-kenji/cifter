@@ -7,6 +7,10 @@
 - `--source PATH` は必須
 - `-D NAME[=VALUE]` は複数回指定可能
 - 出力は行番号付き text
+- ただし `flow` / `path` は、保持した元ソース行どうしが連続しない区間ごとに 1 行の省略表示を挿入できる
+- 省略表示は合成行であり元ソース行番号を持たない
+- 省略表示の可視文字列は `...` とし、インデントはその区間で最初に現れる非空の省略対象行の先頭空白を引き継ぐ
+- 省略対象が空行だけの区間では、省略表示のインデントは直後の保持行に合わせる
 - 抽出結果出力だけは `--color` / `--no-color` でシンタックスハイライト有無を制御できる
 - `--color` / `--no-color` を省略した場合、標準出力が TTY のときだけ色付きで出力する
 - 色付き出力は ANSI エスケープを含むが、可視文字列の内容と行番号契約は変えない
@@ -30,8 +34,51 @@
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に走査する
 - `--track` は複数回指定可能
 - `--track` 一致文は骨格に追加して残す
+- 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
 - `--highlight` は `--track` がない場合は無効果
 - `--highlight` を指定しても `--no-color` または非 TTY では追加強調を行わない
+
+例:
+
+```c
+int DecideState(int x)
+{
+    int state = 0;
+    LogStart();
+
+    if (x > 0) {
+        Prepare();
+        state = 1;
+    } else {
+        PrepareFallback();
+        state = 2;
+    }
+
+    Finalize();
+    return state;
+}
+```
+
+```sh
+cift flow --function DecideState --source decide_state.c --track state
+```
+
+```text
+1: int DecideState(int x)
+2: {
+3:     int state = 0;
+        ...
+6:     if (x > 0) {
+            ...
+8:         state = 1;
+9:     } else {
+            ...
+11:         state = 2;
+12:     }
+        ...
+15:     return state;
+16: }
+```
 
 ## `path`
 
@@ -48,6 +95,7 @@
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
 - `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索できる
 - route の探索対象は常に現在コンテナの直下文だけで、loop や branch を暗黙にはまたがない
+- 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
 
 例:
 
@@ -83,6 +131,7 @@ cift path --function RouteTail --source route_tail.c --route 'case 1 > if x > 0'
 8:         }
 9:         After();
 10:         break;
+        ...
 13:     }
 14: }
 ```
@@ -109,12 +158,14 @@ cift path --function ElseRoute --source else_route.c --route 'else'
 1: int ElseRoute(int x)
 2: {
 3:     if (x > 0) {
-4:     } else {
-5:         WorkB();
-6:     }
-8:     After();
-9:     return 3;
-10: }
+            ...
+5:     } else {
+6:         WorkB();
+7:     }
+        ...
+9:     After();
+10:     return 3;
+11: }
 ```
 
 ```sh

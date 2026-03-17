@@ -16,6 +16,7 @@
 - `line_no` は 1-based 行番号
 - `text` はその行の表示内容
 - `highlights` は行内の追加強調範囲列
+- `omitted_after_indent` は直後に `...` を差し込む場合のコード側インデント
 - 色なし出力では `highlights` を可視文字列へ反映しない
 - 表示時の列補正は renderer が担う
 

@@ -21,7 +21,12 @@ class _SupportsIsatty(Protocol):
 
 def render_result(result: ExtractionResult) -> str:
     width = len(str(result.lines[-1].line_no))
-    return "\n".join(f"{line.line_no:>{width}}: {line.text}" for line in result.lines)
+    rendered: list[str] = []
+    for line in result.lines:
+        rendered.append(f"{line.line_no:>{width}}: {line.text}")
+        if line.omitted_after_indent is not None:
+            rendered.append(f"{' ' * (width + 2)}{line.omitted_after_indent}...")
+    return "\n".join(rendered)
 
 
 def print_result(
@@ -53,6 +58,8 @@ def print_result(
         )
         _apply_inline_highlights(rendered_line, line.text, line.highlights, column_offset=len(prefix))
         console.print(rendered_line)
+        if line.omitted_after_indent is not None:
+            console.print(Text(f"{' ' * (width + 2)}{line.omitted_after_indent}..."))
     output.write(console.export_text(styles=True))
 
 

@@ -339,6 +339,32 @@ def test_flow_keeps_skeleton_and_track_lines(tmp_path: Path) -> None:
     assert "25:         break;" in result.stdout
 
 
+def test_flow_renders_ellipsis_for_omitted_regions(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "flow",
+            "--function",
+            "TrackOnly",
+            "--source",
+            str(source),
+            "--track",
+            "state",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == (
+        " 5: int TrackOnly(Context *ctx)\n"
+        " 6: {\n"
+        " 7:     int state = 0;\n"
+        "        ...\n"
+        " 9:     state = state + 1;\n"
+        "10:     return state;\n"
+        "11: }\n"
+    )
+
+
 def test_flow_keeps_break_inside_case_block(tmp_path: Path) -> None:
     source = _write(tmp_path, "block_case.c", BLOCK_CASE_SOURCE)
     result = runner.invoke(
@@ -607,6 +633,36 @@ def test_path_keeps_parent_if_for_else_segment(tmp_path: Path) -> None:
     assert "9:     After();" in result.stdout
     assert "10:     return 3;" in result.stdout
     assert "WorkA();" not in result.stdout
+
+
+def test_path_renders_ellipsis_for_omitted_regions(tmp_path: Path) -> None:
+    source = _write(tmp_path, "else_route.c", ELSE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "ElseRoute",
+            "--source",
+            str(source),
+            "--route",
+            "else",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == (
+        " 1: int ElseRoute(int x)\n"
+        " 2: {\n"
+        " 3:     if (x > 0) {\n"
+        "            ...\n"
+        " 5:     } else {\n"
+        " 6:         WorkB();\n"
+        " 7:     }\n"
+        "        ...\n"
+        " 9:     After();\n"
+        "10:     return 3;\n"
+        "11: }\n"
+    )
 
 
 def test_path_supports_default_route(tmp_path: Path) -> None:

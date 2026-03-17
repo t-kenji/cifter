@@ -12,6 +12,7 @@ from cifter.model import (
     normalize_condition_text,
     parse_route,
 )
+from cifter.omission import attach_omission_markers
 from cifter.parser import ParsedSource, condition_text, find_function, function_body, node_text
 
 
@@ -37,6 +38,7 @@ def extract_path(parsed: ParsedSource, function_name: str, route: str) -> Extrac
     _collect_path_from_container(parsed, body, segments, rendered)
     line_numbers = sorted(rendered)
     lines = tuple(ExtractedLine(line_no=line_no, text=rendered[line_no]) for line_no in line_numbers)
+    lines = attach_omission_markers(parsed.source, lines)
     return ExtractionResult(span=parsed.source.span_for_lines(line_numbers), lines=lines)
 
 
