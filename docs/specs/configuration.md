@@ -26,6 +26,7 @@
 - `--color` / `--no-color` を指定可能
 - 制御構造の骨格だけを残す
 - 保持対象は `if` / `else if` / `else` / `switch` / `case` / `default` / `for` / `while` / `do ... while` / `goto` / `break` / `continue` / `return` / ラベル定義
+- `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に走査する
 - `--track` は複数回指定可能
 - `--track` 一致文は骨格に追加して残す
 
@@ -41,6 +42,7 @@
 - 選択した枝の内部にある通常文は残す
 - route が終端に達したコンテナでは、その後に直列で続く通常文を残す
 - `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
+- `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
 
 例:
 

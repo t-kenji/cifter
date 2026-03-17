@@ -54,10 +54,15 @@ def _collect_path_from_container(
     if match.kind == "case":
         _render_switch_context(rendered, parsed, match.owner)
         rendered[match.header_start_line] = parsed.source.line_text(match.header_start_line)
+        body = _case_body_container(match.branch)
         if len(segments) == 1:
             _keep_full_statement(rendered, parsed, match.branch)
             return
-        _collect_path_from_container(parsed, match.branch, segments[1:], rendered)
+        if body is not match.branch:
+            rendered[body.start_point.row + 1] = parsed.source.line_text(body.start_point.row + 1)
+        _collect_path_from_container(parsed, body, segments[1:], rendered)
+        if body is not match.branch:
+            rendered[body.end_point.row + 1] = parsed.source.line_text(body.end_point.row + 1)
         return
 
     _render_if_context(rendered, parsed, match)
@@ -300,6 +305,13 @@ def _container_statements(container: Node) -> list[Node]:
 
 def _is_body_statement(node: Node) -> bool:
     return node.type.endswith("_statement") or node.type == "declaration"
+
+
+def _case_body_container(case_node: Node) -> Node:
+    for child in case_node.named_children:
+        if child.type == "compound_statement":
+            return child
+    return case_node
 
 
 def _switch_cases(switch_node: Node) -> list[Node]:

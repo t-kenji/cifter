@@ -68,7 +68,11 @@ def _collect_statement(
         return
     if statement.type == "case_statement":
         keep.add(statement.start_point.row + 1)
-        _collect_from_container(parsed, statement, keep, tracks)
+        body = _case_body_container(statement)
+        if body is not statement:
+            _keep_range(keep, body.start_point.row + 1, body.start_point.row + 1)
+            keep.add(body.end_point.row + 1)
+        _collect_from_container(parsed, body, keep, tracks)
         return
     if statement.type == "if_statement":
         _collect_if_chain(parsed, statement, keep, tracks)
@@ -165,6 +169,13 @@ def _container_statements(container: Node) -> list[Node]:
 
 def _is_body_statement(node: Node) -> bool:
     return node.type.endswith("_statement") or node.type == "declaration"
+
+
+def _case_body_container(case_node: Node) -> Node:
+    for child in case_node.named_children:
+        if child.type == "compound_statement":
+            return child
+    return case_node
 
 
 def _else_clause(if_node: Node) -> Node | None:

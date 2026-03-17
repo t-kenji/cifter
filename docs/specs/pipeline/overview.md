@@ -22,11 +22,13 @@
 
 - `function` は対象関数の source slice を返す
 - `flow` は制御構造骨格と `--track` 一致文を返す
+- `flow` の `case` / `default` は、必要なら直下の `{ ... }` を中間コンテナとして辿り、元行番号を保ったまま骨格を残す
 - `path` は route に沿う枝だけを返し、非選択 sibling branch は削る
 - `path` は選択した枝の内部にある通常文を残す
 - `path` は route が終端に達したコンテナでは、その後に直列で続く通常文を残す
 - `path` で `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `path` は親構造の開閉と元行番号を維持したまま、非選択枝だけを落とす
+- `path` の `case` / `default` も、必要なら直下の `{ ... }` を中間コンテナとして探索と描画を行う
 - `else if CONDITION` は AST 上の `else_clause` 直下 `if_statement` を 1 要素として照合する
 
 ## レンダーと出力

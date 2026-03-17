@@ -24,6 +24,7 @@
 
 - 制御構造と `--track` 一致文だけを残します
 - `if` / `switch` / loop / jump / label 系を保持対象とします
+- `case` / `default` 直下が `{ ... }` ブロックでも、その内側を中間コンテナとして走査します
 - `--track` は構文上の完全一致だけを扱います
 
 ## 5. extract_path
@@ -31,6 +32,7 @@
 - route DSL を `RouteSegment` 列へ変換します
 - 現在コンテナ内で各 segment に一致する枝を一意に探します
 - 選択枝のみを残し、親構造と route 終端以降の直列文脈を保ちます
+- `case` / `default` 直下が `{ ... }` ブロックでも、その内側を探索対象に含めて元の開閉を残します
 - `else if` は `else_clause` 直下の `if_statement` を 1 要素として扱います
 
 ## 6. render

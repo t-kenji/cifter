@@ -119,6 +119,27 @@ DEFAULT_SOURCE = """int DefaultRoute(int x)
 """
 
 
+BLOCK_CASE_SOURCE = """int BlockCaseRoute(int x)
+{
+    switch (x) {
+    case REQ_A:
+    {
+        Prep();
+        if (x > 0) {
+            Work();
+        }
+        After();
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
+}
+"""
+
+
 AMBIGUOUS_SOURCE = """int Ambiguous(int x)
 {
     if (x > 0) {
@@ -228,6 +249,30 @@ def test_flow_keeps_skeleton_and_track_lines(tmp_path: Path) -> None:
     assert "13:         if (ret == OK) {" in result.stdout
     assert "16:         } else if (errno == EINT) {" in result.stdout
     assert "25:         break;" in result.stdout
+
+
+def test_flow_keeps_break_inside_case_block(tmp_path: Path) -> None:
+    source = _write(tmp_path, "block_case.c", BLOCK_CASE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "flow",
+            "--function",
+            "BlockCaseRoute",
+            "--source",
+            str(source),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "4:     case REQ_A:" in result.stdout
+    assert "5:     {" in result.stdout
+    assert "7:         if (x > 0) {" in result.stdout
+    assert "11:         break;" in result.stdout
+    assert "12:     }" in result.stdout
+    assert "13:     default:" in result.stdout
+    assert "14:     {" in result.stdout
+    assert "15:         break;" in result.stdout
+    assert "16:     }" in result.stdout
 
 
 def test_flow_track_requires_exact_match(tmp_path: Path) -> None:
@@ -356,6 +401,54 @@ def test_path_supports_default_route(tmp_path: Path) -> None:
     assert "7:         HandleDefault();" in result.stdout
     assert "8:         break;" in result.stdout
     assert "case 1" not in result.stdout
+
+
+def test_path_supports_nested_route_inside_case_block(tmp_path: Path) -> None:
+    source = _write(tmp_path, "block_case.c", BLOCK_CASE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "BlockCaseRoute",
+            "--source",
+            str(source),
+            "--route",
+            "case REQ_A > if x > 0",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "4:     case REQ_A:" in result.stdout
+    assert "5:     {" in result.stdout
+    assert "6:         Prep();" in result.stdout
+    assert "7:         if (x > 0) {" in result.stdout
+    assert "8:             Work();" in result.stdout
+    assert "10:         After();" in result.stdout
+    assert "11:         break;" in result.stdout
+    assert "12:     }" in result.stdout
+    assert "default:" not in result.stdout
+
+
+def test_path_supports_default_route_inside_case_block(tmp_path: Path) -> None:
+    source = _write(tmp_path, "block_case.c", BLOCK_CASE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "BlockCaseRoute",
+            "--source",
+            str(source),
+            "--route",
+            "default",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "13:     default:" in result.stdout
+    assert "14:     {" in result.stdout
+    assert "15:         break;" in result.stdout
+    assert "16:     }" in result.stdout
+    assert "case REQ_A" not in result.stdout
 
 
 def test_invalid_route_fails(tmp_path: Path) -> None:
