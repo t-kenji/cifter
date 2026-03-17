@@ -18,9 +18,17 @@ class SourceSpan:
 
 
 @dataclass(frozen=True)
+class InlineHighlightSpan:
+    start_column: int
+    end_column: int
+    kind: str
+
+
+@dataclass(frozen=True)
 class ExtractedLine:
     line_no: int
     text: str
+    highlights: tuple[InlineHighlightSpan, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -39,7 +47,7 @@ class TrackPath:
         value = raw.strip()
         if not value or not TRACK_PATH_PATTERN.fullmatch(value):
             raise CiftError(f"不正な --track です: {raw}")
-        return cls(raw=value, normalized=value.replace(" ", ""))
+        return cls(raw=value, normalized="".join(value.split()))
 
 
 @dataclass(frozen=True)

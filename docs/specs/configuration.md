@@ -24,11 +24,14 @@
 
 - 必須引数は `--function`
 - `--color` / `--no-color` を指定可能
+- `--highlight` を指定したときだけ `--track` 一致箇所へ追加強調を適用する
 - 制御構造の骨格だけを残す
 - 保持対象は `if` / `else if` / `else` / `switch` / `case` / `default` / `for` / `while` / `do ... while` / `goto` / `break` / `continue` / `return` / ラベル定義
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に走査する
 - `--track` は複数回指定可能
 - `--track` 一致文は骨格に追加して残す
+- `--highlight` は `--track` がない場合は無効果
+- `--highlight` を指定しても `--no-color` または非 TTY では追加強調を行わない
 
 ## `path`
 

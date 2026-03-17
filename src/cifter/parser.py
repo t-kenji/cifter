@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,6 +54,35 @@ class SourceFile:
     def slice_from_line_start(self, line_no: int, end_byte: int) -> str:
         start_byte = self.line_start_byte(line_no)
         return self.text.encode("utf-8")[start_byte:end_byte].decode("utf-8").rstrip()
+
+    def inline_spans_for_byte_range(self, start_byte: int, end_byte: int) -> tuple[tuple[int, int, int], ...]:
+        if start_byte >= end_byte:
+            return ()
+        text_bytes = self.text.encode("utf-8")
+        start_line_index = self._line_index_for_byte(start_byte)
+        end_line_index = self._line_index_for_byte(end_byte - 1)
+        spans: list[tuple[int, int, int]] = []
+        for line_index in range(start_line_index, end_line_index + 1):
+            line_no = line_index + 1
+            line_start_byte = self.line_start_bytes[line_index]
+            line_end_byte = line_start_byte + len(self.lines[line_index].encode("utf-8"))
+            span_start_byte = max(start_byte, line_start_byte)
+            span_end_byte = min(end_byte, line_end_byte)
+            if span_start_byte >= span_end_byte:
+                continue
+            segment_text = text_bytes[span_start_byte:span_end_byte].decode("utf-8")
+            leading_trim = len(segment_text) - len(segment_text.lstrip())
+            trailing_trim = len(segment_text) - len(segment_text.rstrip())
+            trimmed_text = segment_text.strip()
+            if not trimmed_text:
+                continue
+            start_column = len(text_bytes[line_start_byte:span_start_byte].decode("utf-8")) + leading_trim
+            end_column = len(text_bytes[line_start_byte:span_end_byte].decode("utf-8")) - trailing_trim
+            spans.append((line_no, start_column, end_column))
+        return tuple(spans)
+
+    def _line_index_for_byte(self, byte_offset: int) -> int:
+        return bisect_right(self.line_start_bytes, byte_offset) - 1
 
 
 @dataclass(frozen=True)

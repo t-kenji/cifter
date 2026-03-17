@@ -4,12 +4,16 @@ import re
 import subprocess
 import sys
 import tomllib
+from io import StringIO
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from cifter.cli import app
-from cifter.render import _should_use_color
+from cifter.extract_flow import extract_flow
+from cifter.model import ExtractedLine, ExtractionResult, InlineHighlightSpan, SourceSpan, TrackPath
+from cifter.parser import parse_source
+from cifter.render import _rendered_column_for_source_column, _should_use_color, print_result
 
 
 def _read_expected_version() -> str:
@@ -71,6 +75,28 @@ int TrackOnly(Context *ctx)
     ctx->state = 1;
     state = state + 1;
     return state;
+}
+"""
+
+
+MULTILINE_TRACK_SOURCE = """typedef struct Context {
+    int state;
+} Context;
+
+int TrackMultiline(Context *ctx)
+{
+    ctx
+        ->state = 1;
+    return ctx
+        ->state;
+}
+"""
+
+
+TAB_TRACK_SOURCE = """int TabTrack(void)
+{
+\t\tst->spl.status = status;
+    return 0;
 }
 """
 
@@ -374,6 +400,145 @@ def test_flow_track_keeps_matching_access_path(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "ctx->state = 1;" in result.stdout
     assert "int state = 0;" not in result.stdout
+
+
+def test_extract_flow_records_track_highlights_for_matching_identifiers(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    parsed = parse_source(source, [])
+    result = extract_flow(parsed, "TrackOnly", (TrackPath.parse("state"),), include_highlights=True)
+
+    declaration_line = next(line for line in result.lines if line.text == "    int state = 0;")
+    assignment_line = next(line for line in result.lines if line.text == "    state = state + 1;")
+    return_line = next(line for line in result.lines if line.text == "    return state;")
+
+    assert [(span.start_column, span.end_column, span.kind) for span in declaration_line.highlights] == [
+        (8, 13, "track_match")
+    ]
+    assert [(span.start_column, span.end_column, span.kind) for span in assignment_line.highlights] == [
+        (4, 9, "track_match"),
+        (12, 17, "track_match"),
+    ]
+    assert [(span.start_column, span.end_column, span.kind) for span in return_line.highlights] == [
+        (11, 16, "track_match")
+    ]
+
+
+def test_extract_flow_records_track_highlights_for_multiline_field_expression(tmp_path: Path) -> None:
+    source = _write(tmp_path, "multiline_track.c", MULTILINE_TRACK_SOURCE)
+    parsed = parse_source(source, [])
+    result = extract_flow(parsed, "TrackMultiline", (TrackPath.parse("ctx->state"),), include_highlights=True)
+
+    first_line = next(line for line in result.lines if line.text == "    ctx")
+    second_line = next(line for line in result.lines if line.text == "        ->state = 1;")
+    return_first_line = next(line for line in result.lines if line.text == "    return ctx")
+    return_second_line = next(line for line in result.lines if line.text == "        ->state;")
+
+    assert [(span.start_column, span.end_column, span.kind) for span in first_line.highlights] == [
+        (4, 7, "track_match")
+    ]
+    assert [(span.start_column, span.end_column, span.kind) for span in second_line.highlights] == [
+        (8, 15, "track_match")
+    ]
+    assert [(span.start_column, span.end_column, span.kind) for span in return_first_line.highlights] == [
+        (11, 14, "track_match")
+    ]
+    assert [(span.start_column, span.end_column, span.kind) for span in return_second_line.highlights] == [
+        (8, 15, "track_match")
+    ]
+
+
+def test_extract_flow_does_not_record_highlights_by_default(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    parsed = parse_source(source, [])
+    result = extract_flow(parsed, "TrackOnly", (TrackPath.parse("state"),))
+
+    assert all(not line.highlights for line in result.lines)
+
+
+def test_flow_color_output_does_not_highlight_without_highlight_flag(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    color_result = runner.invoke(
+        app,
+        ["flow", "--function", "TrackOnly", "--source", str(source), "--track", "state", "--color"],
+    )
+    plain_result = runner.invoke(
+        app,
+        ["flow", "--function", "TrackOnly", "--source", str(source), "--track", "state", "--no-color"],
+    )
+
+    assert color_result.exit_code == 0
+    assert plain_result.exit_code == 0
+    assert "48;2;59;130;246" not in color_result.stdout
+    assert _strip_ansi(color_result.stdout) == plain_result.stdout
+
+
+def test_flow_color_output_highlights_track_matches_with_highlight_flag(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    color_result = runner.invoke(
+        app,
+        [
+            "flow",
+            "--function",
+            "TrackOnly",
+            "--source",
+            str(source),
+            "--track",
+            "state",
+            "--highlight",
+            "--color",
+        ],
+    )
+    plain_result = runner.invoke(
+        app,
+        ["flow", "--function", "TrackOnly", "--source", str(source), "--track", "state", "--no-color"],
+    )
+
+    assert color_result.exit_code == 0
+    assert plain_result.exit_code == 0
+    assert "48;2;59;130;246" in color_result.stdout
+    assert _strip_ansi(color_result.stdout) == plain_result.stdout
+
+
+def test_flow_highlight_is_noop_without_color_output(tmp_path: Path) -> None:
+    source = _write(tmp_path, "track.c", TRACK_SOURCE)
+    auto_result = runner.invoke(
+        app,
+        ["flow", "--function", "TrackOnly", "--source", str(source), "--track", "state", "--highlight"],
+    )
+    plain_result = runner.invoke(
+        app,
+        ["flow", "--function", "TrackOnly", "--source", str(source), "--track", "state"],
+    )
+
+    assert auto_result.exit_code == 0
+    assert plain_result.exit_code == 0
+    assert ANSI_ESCAPE_PATTERN.search(auto_result.stdout) is None
+    assert auto_result.stdout == plain_result.stdout
+
+
+def test_rendered_column_for_source_column_expands_tabs() -> None:
+    assert _rendered_column_for_source_column("\t\tst->spl.status = status;", 2) == 8
+    assert _rendered_column_for_source_column(" \tst->spl.status = status;", 2) == 4
+
+
+def test_print_result_applies_highlight_after_tab_expansion_and_prefix() -> None:
+    result = ExtractionResult(
+        span=SourceSpan(file=Path("tab.c"), start_line=12, end_line=12),
+        lines=(
+            ExtractedLine(
+                line_no=12,
+                text="\t\tst->spl.status = status;",
+                highlights=(InlineHighlightSpan(start_column=2, end_column=16, kind="track_match"),),
+            ),
+        ),
+    )
+    output = StringIO()
+
+    print_result(result, "c", color=True, file=output)
+
+    rendered = output.getvalue()
+    assert "48;2;59;130;246" in rendered
+    assert _strip_ansi(rendered).strip() == "12:         st->spl.status = status;"
 
 
 def test_path_keeps_selected_case_if_branch_and_following_statements(tmp_path: Path) -> None:
@@ -762,6 +927,19 @@ def test_subcommand_help_lists_color_options() -> None:
         assert result.exit_code == 0
         assert "--color" in result.stdout
         assert "--no-color" in result.stdout
+
+
+def test_flow_help_lists_highlight_option_only_for_flow() -> None:
+    flow_result = runner.invoke(app, ["flow", "--help"])
+    function_result = runner.invoke(app, ["function", "--help"])
+    path_result = runner.invoke(app, ["path", "--help"])
+
+    assert flow_result.exit_code == 0
+    assert function_result.exit_code == 0
+    assert path_result.exit_code == 0
+    assert "--highlight" in flow_result.stdout
+    assert "--highlight" not in function_result.stdout
+    assert "--highlight" not in path_result.stdout
 
 
 def test_cli_version_prints_project_version() -> None:

@@ -12,10 +12,18 @@
 
 ## ExtractedLine
 
-`ExtractedLine(line_no, text)` は 1 行分の表示単位です。
+`ExtractedLine(line_no, text, highlights)` は 1 行分の表示単位です。
 
 - `line_no`: 1-based 行番号
 - `text`: その行の表示内容
+- `highlights`: 色付き出力時にだけ使う行内強調範囲
+
+## InlineHighlightSpan
+
+`InlineHighlightSpan(start_column, end_column, kind)` は 1 行内の追加強調範囲です。
+
+- `start_column` / `end_column`: source line 基準の 0-based 半開区間
+- `kind`: 現時点では `track_match` のみ
 
 ## ExtractionResult
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
@@ -12,7 +13,7 @@ from cifter.extract_function import extract_function
 from cifter.extract_path import extract_path
 from cifter.model import ExtractionResult, TrackPath
 from cifter.parser import parse_source
-from cifter.render import print_result
+from cifter.render import _should_use_color, print_result
 from cifter.version import format_version_output
 
 app = typer.Typer(no_args_is_help=True, help="C/C++ の関数実装を抽出する CLI")
@@ -88,6 +89,7 @@ def flow_command(
     function_name: Annotated[str, typer.Option("--function", help="対象関数名")],
     source: SourceOption,
     track: Annotated[list[str], typer.Option("--track", help="保持するアクセスパス")] | None = None,
+    highlight: Annotated[bool, typer.Option("--highlight", help="`--track` 一致箇所を追加強調する")] = False,
     color: ColorOption = None,
     defines: Annotated[
         list[str] | None,
@@ -97,7 +99,13 @@ def flow_command(
     def task() -> tuple[ExtractionResult, str]:
         parsed = parse_source(source, defines or [])
         tracks = tuple(TrackPath.parse(value) for value in (track or []))
-        return extract_flow(parsed, function_name, tracks), parsed.language_name
+        include_highlights = bool(highlight and tracks and _should_use_color(color, sys.stdout))
+        return extract_flow(
+            parsed,
+            function_name,
+            tracks,
+            include_highlights=include_highlights,
+        ), parsed.language_name
 
     _run(task, color=color)
 
