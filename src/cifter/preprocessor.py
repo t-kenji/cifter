@@ -67,9 +67,9 @@ def _parse_directive(line: str) -> _Directive | None:
     body = stripped[1:].lstrip()
     if not body:
         return None
-    name, _, tail = body.partition(" ")
-    if not tail and "\t" in body:
-        name, _, tail = body.partition("\t")
+    parts = body.split(None, 1)
+    name = parts[0]
+    tail = parts[1] if len(parts) > 1 else ""
     return _Directive(name=name, body=tail.lstrip())
 
 

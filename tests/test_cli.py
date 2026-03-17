@@ -168,6 +168,33 @@ PREPROCESS_NESTED_SOURCE = """int Nested(void)
 """
 
 
+PREPROCESS_TAB_DIRECTIVE_SOURCE = """int Tabbed(void)
+{
+#if defined(ENABLE_FIRST)
+    return 1;
+#else\t// fallback
+    return 0;
+#endif\t// end first
+    return 9;
+}
+"""
+
+
+PREPROCESS_TAB_DEFINE_SOURCE = """int TabMacros(void)
+{
+#define\tLOCAL 1
+#ifdef\tLOCAL
+    return 1;
+#endif\t// local
+#undef\tLOCAL
+#ifndef\tLOCAL
+    return 2;
+#endif\t// after undef
+    return 3;
+}
+"""
+
+
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
@@ -408,6 +435,44 @@ def test_preprocessor_handles_nested_define_and_undef(tmp_path: Path) -> None:
     assert "8:     return 2;" not in result.stdout
     assert "13:     return 3;" not in result.stdout
     assert "15:     return 4;" in result.stdout
+
+
+def test_preprocessor_handles_tabbed_else_and_endif_comments(tmp_path: Path) -> None:
+    source = _write(tmp_path, "tabbed.c", PREPROCESS_TAB_DIRECTIVE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "Tabbed",
+            "--source",
+            str(source),
+            "-D",
+            "ENABLE_FIRST",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "4:     return 1;" in result.stdout
+    assert "6:     return 0;" not in result.stdout
+    assert "8:     return 9;" in result.stdout
+
+
+def test_preprocessor_handles_tabbed_define_and_undef(tmp_path: Path) -> None:
+    source = _write(tmp_path, "tab_macros.c", PREPROCESS_TAB_DEFINE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "TabMacros",
+            "--source",
+            str(source),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "5:     return 1;" in result.stdout
+    assert "9:     return 2;" in result.stdout
+    assert "11:     return 3;" in result.stdout
 
 
 def test_missing_function_fails(tmp_path: Path) -> None:
