@@ -5,6 +5,7 @@ from tree_sitter import Node
 from cifter.model import ExtractedLine, ExtractionResult, InlineHighlightSpan, TrackPath
 from cifter.omission import attach_omission_markers
 from cifter.parser import ParsedSource, find_function, function_body, node_text
+from cifter.tree_helpers import case_body_container, container_statements, else_clause
 
 CONTROL_TYPES = {
     "if_statement",
@@ -68,7 +69,7 @@ def _collect_from_container(
     tracks: tuple[TrackPath, ...],
     include_highlights: bool,
 ) -> None:
-    for statement in _container_statements(container):
+    for statement in container_statements(container):
         _collect_statement(parsed, statement, keep, highlights, tracks, include_highlights)
 
 
@@ -91,7 +92,7 @@ def _collect_statement(
         return
     if statement.type == "case_statement":
         keep.add(statement.start_point.row + 1)
-        body = _case_body_container(statement)
+        body = case_body_container(statement)
         if body is not statement:
             _keep_range(keep, body.start_point.row + 1, body.start_point.row + 1)
             keep.add(body.end_point.row + 1)
@@ -147,11 +148,11 @@ def _collect_if_chain(
     else:
         _collect_statement(parsed, consequence, keep, highlights, tracks, include_highlights)
 
-    else_clause = _else_clause(if_node)
-    if else_clause is None:
+    clause = else_clause(if_node)
+    if clause is None:
         return
-    alternative = else_clause.named_children[-1]
-    _keep_range(keep, else_clause.start_point.row + 1, alternative.start_point.row + 1)
+    alternative = clause.named_children[-1]
+    _keep_range(keep, clause.start_point.row + 1, alternative.start_point.row + 1)
     if alternative.type == "if_statement":
         _collect_if_chain(parsed, alternative, keep, highlights, tracks, include_highlights)
         return
@@ -206,34 +207,6 @@ def _track_candidate_text(parsed: ParsedSource, node: Node) -> str | None:
         return "".join(node_text(parsed.source, node).split())
     if node.type == "identifier" and node.parent is not None and node.parent.type != "field_expression":
         return node_text(parsed.source, node)
-    return None
-
-
-def _container_statements(container: Node) -> list[Node]:
-    if container.type == "compound_statement":
-        return list(container.named_children)
-    if container.type == "case_statement":
-        return [child for child in container.named_children if _is_body_statement(child)]
-    if container.type == "labeled_statement":
-        return [container.named_children[-1]]
-    return [container]
-
-
-def _is_body_statement(node: Node) -> bool:
-    return node.type.endswith("_statement") or node.type == "declaration"
-
-
-def _case_body_container(case_node: Node) -> Node:
-    for child in case_node.named_children:
-        if child.type == "compound_statement":
-            return child
-    return case_node
-
-
-def _else_clause(if_node: Node) -> Node | None:
-    for child in if_node.named_children:
-        if child.type == "else_clause":
-            return child
     return None
 
 

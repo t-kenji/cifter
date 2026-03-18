@@ -13,6 +13,8 @@ ParseDiagnosticCategory = Literal["language", "parse", "preprocess", "input"]
 ParseQualityLevel = Literal["clean", "degraded"]
 LanguageMode = Literal["auto", "c", "cpp"]
 LanguageResolution = Literal["explicit", "extension", "quality"]
+InlineHighlightKind = Literal["track_match"]
+RouteSegmentKind = Literal["case", "default", "else_if", "else", "for", "while", "do_while", "if"]
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,7 @@ class ParseQualityReport:
 class InlineHighlightSpan:
     start_column: int
     end_column: int
-    kind: str
+    kind: InlineHighlightKind
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,7 @@ class TrackPath:
 
 @dataclass(frozen=True)
 class RouteSegment:
-    kind: str
+    kind: RouteSegmentKind
     raw: str
     label: str | None = None
     condition: str | None = None

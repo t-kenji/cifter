@@ -15,6 +15,7 @@
 - 色指定を省略した場合は、標準出力が TTY のときだけ色付きになります
 - `.h` と未知拡張子では `auto` が parse quality の高い言語を選びます
 - parse quality が `degraded` のときだけ標準エラーへ診断を出します
+- active な `#pragma` / `#error` は保持したまま解析し、これだけでは `preprocess` 診断を出しません
 
 ## サブコマンド
 
@@ -61,6 +62,7 @@
 - CLI は `CiftError.message` を標準エラーへ出し、終了コード `1` で終了します
 - route 不正、関数未検出、曖昧一致、前処理ディレクティブ不整合が主な失敗要因です
 - 成功時でも parse quality が `degraded` なら `quality[...]` と `repro:` を標準エラーへ出します
+- `preprocess` 診断は、active 領域に本当に未対応な directive が残った場合だけ出します
 
 ## 代表例
 

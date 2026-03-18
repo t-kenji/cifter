@@ -26,27 +26,35 @@ QUALITY_COMPARE_EXTENSIONS = {".h"}
 class SourceFile:
     path: Path
     text: str
+    text_bytes: bytes
     lines: tuple[str, ...]
     trailing_newline: bool
     line_start_bytes: tuple[int, ...]
+    line_byte_lengths: tuple[int, ...]
 
     @classmethod
     def from_text(cls, path: Path, text: str) -> SourceFile:
+        text_bytes = text.encode("utf-8")
         trailing_newline = text.endswith("\n")
         lines = tuple(text.splitlines())
         start_bytes: list[int] = []
+        line_byte_lengths: list[int] = []
         offset = 0
         for index, line in enumerate(lines):
+            line_bytes = line.encode("utf-8")
             start_bytes.append(offset)
-            offset += len(line.encode("utf-8"))
+            line_byte_lengths.append(len(line_bytes))
+            offset += len(line_bytes)
             if index < len(lines) - 1 or trailing_newline:
                 offset += 1
         return cls(
             path=path,
             text=text,
+            text_bytes=text_bytes,
             lines=lines,
             trailing_newline=trailing_newline,
             line_start_bytes=tuple(start_bytes),
+            line_byte_lengths=tuple(line_byte_lengths),
         )
 
     def span_for_lines(self, line_numbers: list[int]) -> SourceSpan:
@@ -60,31 +68,30 @@ class SourceFile:
 
     def slice_from_line_start(self, line_no: int, end_byte: int) -> str:
         start_byte = self.line_start_byte(line_no)
-        return self.text.encode("utf-8")[start_byte:end_byte].decode("utf-8").rstrip()
+        return self.text_bytes[start_byte:end_byte].decode("utf-8").rstrip()
 
     def inline_spans_for_byte_range(self, start_byte: int, end_byte: int) -> tuple[tuple[int, int, int], ...]:
         if start_byte >= end_byte:
             return ()
-        text_bytes = self.text.encode("utf-8")
         start_line_index = self._line_index_for_byte(start_byte)
         end_line_index = self._line_index_for_byte(end_byte - 1)
         spans: list[tuple[int, int, int]] = []
         for line_index in range(start_line_index, end_line_index + 1):
             line_no = line_index + 1
             line_start_byte = self.line_start_bytes[line_index]
-            line_end_byte = line_start_byte + len(self.lines[line_index].encode("utf-8"))
+            line_end_byte = line_start_byte + self.line_byte_lengths[line_index]
             span_start_byte = max(start_byte, line_start_byte)
             span_end_byte = min(end_byte, line_end_byte)
             if span_start_byte >= span_end_byte:
                 continue
-            segment_text = text_bytes[span_start_byte:span_end_byte].decode("utf-8")
+            segment_text = self.text_bytes[span_start_byte:span_end_byte].decode("utf-8")
             leading_trim = len(segment_text) - len(segment_text.lstrip())
             trailing_trim = len(segment_text) - len(segment_text.rstrip())
             trimmed_text = segment_text.strip()
             if not trimmed_text:
                 continue
-            start_column = len(text_bytes[line_start_byte:span_start_byte].decode("utf-8")) + leading_trim
-            end_column = len(text_bytes[line_start_byte:span_end_byte].decode("utf-8")) - trailing_trim
+            start_column = len(self.text_bytes[line_start_byte:span_start_byte].decode("utf-8")) + leading_trim
+            end_column = len(self.text_bytes[line_start_byte:span_end_byte].decode("utf-8")) - trailing_trim
             spans.append((line_no, start_column, end_column))
         return tuple(spans)
 
@@ -162,7 +169,7 @@ def function_body(function_node: Node) -> Node:
 
 
 def node_text(source: SourceFile, node: Node) -> str:
-    return source.text.encode("utf-8")[node.start_byte:node.end_byte].decode("utf-8")
+    return source.text_bytes[node.start_byte:node.end_byte].decode("utf-8")
 
 
 def condition_text(source: SourceFile, node: Node) -> str:
@@ -218,21 +225,21 @@ def _resolve_parse_attempt(
     language: LanguageMode,
 ) -> tuple[_ParseAttempt, LanguageResolution]:
     if language != "auto":
-        return _parse_attempt(source.text, language), "explicit"
+        return _parse_attempt(source.text_bytes, language), "explicit"
 
     suffix = path.suffix.lower()
     if suffix == ".c":
-        return _parse_attempt(source.text, "c"), "extension"
+        return _parse_attempt(source.text_bytes, "c"), "extension"
     if suffix in CPP_EXTENSIONS:
-        return _parse_attempt(source.text, "cpp"), "extension"
+        return _parse_attempt(source.text_bytes, "cpp"), "extension"
     if suffix in QUALITY_COMPARE_EXTENSIONS or suffix not in {".c", *CPP_EXTENSIONS}:
-        return _best_parse_attempt(source.text, prefer_c=suffix == ".h"), "quality"
-    return _parse_attempt(source.text, "c"), "extension"
+        return _best_parse_attempt(source.text_bytes, prefer_c=suffix == ".h"), "quality"
+    return _parse_attempt(source.text_bytes, "c"), "extension"
 
 
-def _best_parse_attempt(text: str, *, prefer_c: bool) -> _ParseAttempt:
-    c_attempt = _parse_attempt(text, "c")
-    cpp_attempt = _parse_attempt(text, "cpp")
+def _best_parse_attempt(text_bytes: bytes, *, prefer_c: bool) -> _ParseAttempt:
+    c_attempt = _parse_attempt(text_bytes, "c")
+    cpp_attempt = _parse_attempt(text_bytes, "cpp")
     if c_attempt.metrics.sort_key() < cpp_attempt.metrics.sort_key():
         return c_attempt
     if cpp_attempt.metrics.sort_key() < c_attempt.metrics.sort_key():
@@ -242,9 +249,9 @@ def _best_parse_attempt(text: str, *, prefer_c: bool) -> _ParseAttempt:
     return cpp_attempt
 
 
-def _parse_attempt(text: str, language_name: str) -> _ParseAttempt:
+def _parse_attempt(text_bytes: bytes, language_name: str) -> _ParseAttempt:
     parser = _build_parser(language_name)
-    tree = parser.parse(text.encode("utf-8"))
+    tree = parser.parse(text_bytes)
     return _ParseAttempt(language_name=language_name, tree=tree, metrics=_collect_parse_metrics(tree.root_node))
 
 

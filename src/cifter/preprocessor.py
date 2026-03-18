@@ -8,7 +8,7 @@ from cifter.errors import CiftError
 from cifter.model import ParseDiagnostic
 
 CONDITIONAL_DIRECTIVES = {"if", "ifdef", "ifndef", "elif", "else", "endif"}
-SUPPORTED_DIRECTIVES = CONDITIONAL_DIRECTIVES | {"define", "undef", "include"}
+SUPPORTED_DIRECTIVES = CONDITIONAL_DIRECTIVES | {"define", "undef", "include", "pragma", "error"}
 
 
 @dataclass
@@ -63,7 +63,7 @@ def preprocess_source(source: str, defines: list[str]) -> PreprocessResult:
             continue
 
         if directive is not None and directive.name == "define" and directive.body:
-            processor.define(_normalize_define(directive.body))
+            processor.define(directive.body)
         elif directive is not None and directive.name == "undef" and directive.body:
             processor.undef(directive.body.strip())
         elif directive is not None and directive.name not in SUPPORTED_DIRECTIVES:
