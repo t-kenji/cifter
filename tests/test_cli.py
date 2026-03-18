@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -142,3 +143,41 @@ def test_python_module_version() -> None:
     result = subprocess.run([sys.executable, "-m", "cifter", "--version"], capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert result.stdout.strip() == EXPECTED_VERSION
+
+
+def test_python_module_help_succeeds_with_cp1252_stdio() -> None:
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+
+    result = subprocess.run(
+        [sys.executable, "-m", "cifter", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    help_text = normalize_help_output(result.stdout)
+    assert "C/C++ の関数実装を抽出する CLI" in help_text
+    assert "function" in help_text
+    assert "flow" in help_text
+    assert "path" in help_text
+
+
+def test_python_module_user_error_succeeds_with_cp1252_stdio(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    source = write_text_file(tmp_path, "foo.c", SOURCE)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "cifter", "function", "--name", "Missing", "--source", str(source)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "関数が見つかりません" in result.stderr
+    assert "UnicodeEncodeError" not in result.stderr

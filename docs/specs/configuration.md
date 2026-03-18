@@ -25,6 +25,8 @@
 - parse quality 診断は終了コードを変えない
 - 診断カテゴリは `language` / `parse` / `preprocess` / `input` の 4 種である
 - 再現情報は `source path`、解決後言語、`--language` の実効値、`-D` 一覧を含む
+- help、version、parse quality 診断、利用者向けエラーは、実行環境の既定 stdout/stderr エンコーディングが日本語を表現できない場合でも `UnicodeEncodeError` で異常終了してはならない
+- 実装は起動時に stdout/stderr を UTF-8 へ正規化してこの契約を満たしてよい
 - 入力文字コードは UTF-8 と UTF-8 with BOM を受理する
 - 非 UTF-8 入力は抽出失敗として扱う
 - 改行コードは LF と CRLF を受理し、内部では LF に正規化する

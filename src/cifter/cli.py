@@ -20,7 +20,25 @@ app = typer.Typer(no_args_is_help=True, help="C/C++ の関数実装を抽出す�
 
 
 def main() -> None:
+    _normalize_stdio_encoding()
     app()
+
+
+def _normalize_stdio_encoding() -> None:
+    _normalize_stream_encoding(sys.stdout)
+    _normalize_stream_encoding(sys.stderr)
+
+
+def _normalize_stream_encoding(stream: object) -> None:
+    reconfigure = getattr(stream, "reconfigure", None)
+    if not callable(reconfigure):
+        return
+
+    encoding = getattr(stream, "encoding", None)
+    if isinstance(encoding, str) and encoding.lower().replace("_", "-") == "utf-8":
+        return
+
+    reconfigure(encoding="utf-8")
 
 
 def _version_callback(value: bool) -> None:

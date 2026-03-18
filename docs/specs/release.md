@@ -22,7 +22,7 @@
 - Linux の必須 CI は `uv sync --frozen`、`uv run pytest`、`uv run ruff check .`、`uv run ty check .`、`uv build` を順に実行する
 - Linux の必須 CI は build 後に生成 `wheel` / `sdist` について配布名、`LICENSE` 同梱、MIT メタデータ、project URL、keywords、classifiers を検証する
 - Linux の必須 CI は build 後に生成 wheel をクリーンな仮想環境へ install し、`cift --help`、`python -m cifter --help`、`cift --version`、`python -m cifter --version`、実コマンド 1 本の smoke を行う
-- Windows は追加対象とし、同じ wheel に対する install smoke のみを行う
+- Windows は追加対象とし、同じ wheel に対する install smoke で `cift --help`、`python -m cifter --help`、`cift --version`、`python -m cifter --version`、実コマンド 1 本を観測する
 - Windows の結果は互換性観測用であり、release の必須ゲートには含めない
 
 ## バージョンとタグ
