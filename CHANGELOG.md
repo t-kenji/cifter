@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `.h` と未知拡張子の自動言語判定、および `--language auto|c|cpp` を追加
+- 成功時の parse quality 診断を標準エラーへ追加
+- 複数行ディレクティブを含む前処理回帰と C++ 回帰を強化
+
 ## [0.2.1] - 2026-03-16
 
 - README の Quick Start を更新し、`function` / `flow` / `path` の使い分けと出力差が直感的に分かるようにした

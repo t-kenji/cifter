@@ -304,6 +304,99 @@ PREPROCESS_TAB_DEFINE_SOURCE = """int TabMacros(void)
 """
 
 
+PREPROCESS_MULTILINE_IF_SOURCE = """int MultiIf(void)
+{
+#if defined(ENABLE_A) || \\
+    defined(ENABLE_B)
+    return 1;
+#else
+    return 0;
+#endif
+}
+"""
+
+
+PREPROCESS_MULTILINE_DEFINE_SOURCE = """int MultiDefine(void)
+{
+#define LOCAL_FLAG \\
+    1
+#ifdef LOCAL_FLAG
+    return 1;
+#endif
+#undef LOCAL_FLAG
+#ifdef LOCAL_FLAG
+    return 2;
+#endif
+    return 3;
+}
+"""
+
+
+PREPROCESS_UNSUPPORTED_DIRECTIVE_SOURCE = """#pragma once
+int KeepPragma(void)
+{
+    return 1;
+}
+"""
+
+
+HEADER_C_SOURCE = """int SharedHeader(void)
+{
+    return 1;
+}
+"""
+
+
+HEADER_CPP_SOURCE = """namespace Demo {
+inline int HeaderCpp(int &value)
+{
+    return value;
+}
+}
+"""
+
+
+CPP_MEMBER_SOURCE = """namespace Demo {
+class Worker {
+public:
+    int Step(int *ptr);
+};
+
+int Worker::Step(int *ptr)
+{
+    auto current = ptr;
+    if constexpr (true) {
+        if (current == nullptr) {
+            return 0;
+        }
+    }
+    return 1;
+}
+}
+"""
+
+
+CPP_PATH_SOURCE = """namespace Demo {
+int Route(int value)
+{
+    if (value > 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+}
+"""
+
+
+CPP_TEMPLATE_SOURCE = """template <typename T>
+T Pick(T value)
+{
+    return value;
+}
+"""
+
+
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 
@@ -962,6 +1055,252 @@ def test_preprocessor_handles_tabbed_define_and_undef(tmp_path: Path) -> None:
     assert "11:     return 3;" in result.stdout
 
 
+def test_preprocessor_handles_multiline_if_conditions(tmp_path: Path) -> None:
+    source = _write(tmp_path, "multi_if.c", PREPROCESS_MULTILINE_IF_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "MultiIf",
+            "--source",
+            str(source),
+            "-D",
+            "ENABLE_B",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "5:     return 1;" in result.stdout
+    assert "6:     return 0;" not in result.stdout
+
+
+def test_preprocessor_handles_multiline_define_and_undef(tmp_path: Path) -> None:
+    source = _write(tmp_path, "multi_define.c", PREPROCESS_MULTILINE_DEFINE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "MultiDefine",
+            "--source",
+            str(source),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "6:     return 1;" in result.stdout
+    assert "9:     return 2;" not in result.stdout
+    assert "12:     return 3;" in result.stdout
+
+
+def test_help_lists_language_option_for_all_subcommands() -> None:
+    for command in ("function", "flow", "path"):
+        result = runner.invoke(app, [command, "--help"])
+        assert result.exit_code == 0
+        assert "--language" in result.stdout
+
+
+def test_parse_source_prefers_c_for_tied_header_quality(tmp_path: Path) -> None:
+    source = _write(tmp_path, "shared.h", HEADER_C_SOURCE)
+    parsed = parse_source(source, [])
+
+    assert parsed.resolved_language == "c"
+    assert parsed.language_resolution == "quality"
+    assert parsed.quality.level == "clean"
+
+
+def test_parse_source_detects_cpp_header_by_quality(tmp_path: Path) -> None:
+    source = _write(tmp_path, "header_cpp.h", HEADER_CPP_SOURCE)
+    parsed = parse_source(source, [])
+
+    assert parsed.resolved_language == "cpp"
+    assert parsed.language_resolution == "quality"
+
+
+def test_cli_language_option_overrides_header_detection(tmp_path: Path) -> None:
+    source = _write(tmp_path, "header_cpp.h", HEADER_CPP_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "HeaderCpp",
+            "--source",
+            str(source),
+            "--language",
+            "cpp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "2: inline int HeaderCpp(int &value)" in result.stdout
+    assert result.stderr == ""
+
+
+def test_cpp_function_extracts_out_of_line_method(tmp_path: Path) -> None:
+    source = _write(tmp_path, "worker.cpp", CPP_MEMBER_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "Step",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "7: int Worker::Step(int *ptr)" in result.stdout
+    assert "15:     return 1;" in result.stdout
+
+
+def test_cpp_flow_supports_if_constexpr_and_auto(tmp_path: Path) -> None:
+    source = _write(tmp_path, "worker.cpp", CPP_MEMBER_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "flow",
+            "--function",
+            "Step",
+            "--source",
+            str(source),
+            "--track",
+            "current",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "9:     auto current = ptr;" in result.stdout
+    assert "10:     if constexpr (true) {" in result.stdout
+    assert "11:         if (current == nullptr) {" in result.stdout
+    assert "15:     return 1;" in result.stdout
+
+
+def test_cpp_path_keeps_selected_branch(tmp_path: Path) -> None:
+    source = _write(tmp_path, "route.cpp", CPP_PATH_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "Route",
+            "--source",
+            str(source),
+            "--route",
+            "if value > 0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "4:     if (value > 0) {" in result.stdout
+    assert "5:         return 1;" in result.stdout
+    assert "else" not in result.stdout
+
+
+def test_cpp_function_extracts_template_definition(tmp_path: Path) -> None:
+    source = _write(tmp_path, "template.hpp", CPP_TEMPLATE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "Pick",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "1: template <typename T>" in result.stdout
+    assert "4:     return value;" in result.stdout
+
+
+def test_quality_diagnostics_use_stderr_only_for_preprocess_warnings(tmp_path: Path) -> None:
+    source = _write(tmp_path, "pragma.c", PREPROCESS_UNSUPPORTED_DIRECTIVE_SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "KeepPragma",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "2: int KeepPragma(void)" in result.stdout
+    assert "quality[preprocess]:" in result.stderr
+    assert "repro:" in result.stderr
+
+
+def test_quality_diagnostics_report_crlf_normalization(tmp_path: Path) -> None:
+    source = _write_bytes(
+        tmp_path,
+        "crlf.c",
+        b"int CrLf(void)\r\n{\r\n    return 1;\r\n}\r\n",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "CrLf",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "1: int CrLf(void)" in result.stdout
+    assert "quality[input]:" in result.stderr
+    assert "CRLF" in result.stderr
+
+
+def test_quality_diagnostics_report_bom_normalization(tmp_path: Path) -> None:
+    source = _write_bytes(
+        tmp_path,
+        "bom.c",
+        b"\xef\xbb\xbfint Bommed(void)\n{\n    return 1;\n}\n",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "Bommed",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "1: int Bommed(void)" in result.stdout
+    assert "quality[input]:" in result.stderr
+    assert "BOM" in result.stderr
+
+
+def test_non_utf8_input_fails(tmp_path: Path) -> None:
+    source = _write_bytes(
+        tmp_path,
+        "non_utf8.c",
+        "int Bad(void)\n{\n    // あ\n    return 1;\n}\n".encode("cp932"),
+    )
+    result = runner.invoke(
+        app,
+        [
+            "function",
+            "--name",
+            "Bad",
+            "--source",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "UTF-8" in result.stderr
+
+
 def test_missing_function_fails(tmp_path: Path) -> None:
     source = _write(tmp_path, "foo.c", SOURCE)
     result = runner.invoke(app, ["function", "--name", "Missing", "--source", str(source)])
@@ -1070,6 +1409,12 @@ def test_python_module_version() -> None:
 def _write(tmp_path: Path, name: str, content: str) -> Path:
     path = tmp_path / name
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_bytes(tmp_path: Path, name: str, content: bytes) -> Path:
+    path = tmp_path / name
+    path.write_bytes(content)
     return path
 
 

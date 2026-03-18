@@ -4,10 +4,15 @@ import re
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
+from typing import Literal
 
 from cifter.errors import CiftError
 
 TRACK_PATH_PATTERN = re.compile(r"^[A-Za-z_]\w*(?:(?:->|\.)[A-Za-z_]\w*)*$")
+ParseDiagnosticCategory = Literal["language", "parse", "preprocess", "input"]
+ParseQualityLevel = Literal["clean", "degraded"]
+LanguageMode = Literal["auto", "c", "cpp"]
+LanguageResolution = Literal["explicit", "extension", "quality"]
 
 
 @dataclass(frozen=True)
@@ -15,6 +20,26 @@ class SourceSpan:
     file: Path
     start_line: int
     end_line: int
+
+
+@dataclass(frozen=True)
+class ParseDiagnostic:
+    category: ParseDiagnosticCategory
+    code: str
+    message: str
+    details: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class ParseQualityReport:
+    level: ParseQualityLevel
+    diagnostics: tuple[ParseDiagnostic, ...] = ()
+
+    @classmethod
+    def from_diagnostics(cls, diagnostics: tuple[ParseDiagnostic, ...]) -> ParseQualityReport:
+        if diagnostics:
+            return cls(level="degraded", diagnostics=diagnostics)
+        return cls(level="clean", diagnostics=())
 
 
 @dataclass(frozen=True)

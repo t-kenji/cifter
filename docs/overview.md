@@ -9,6 +9,7 @@
 - [pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md): 前処理からレンダリングまでの処理順と責務
 - [data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md): 抽出結果と route / track 周辺の主要データ型
 - [architecture.md](/home/tkenji/Repos/cifter/docs/architecture.md): モジュール責務と依存方向
+- [performance.md](/home/tkenji/Repos/cifter/docs/performance.md): フェーズ3の性能計測手順と現状記録
 - [release.md](/home/tkenji/Repos/cifter/docs/release.md): release 手順と PyPI publish 運用
 
 ## 実装の見取り図

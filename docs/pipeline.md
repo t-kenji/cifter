@@ -1,20 +1,31 @@
 # パイプライン
 
-`cifter` の処理は `preprocessor` → `parser` → `extract_*` → `render` の順に進みます。
+`cifter` の処理は `input normalize` → `preprocessor` → `parser` → `extract_*` → `render` の順に進みます。
+
+## 0. input normalize
+
+- 入力は UTF-8 と UTF-8 with BOM を受理します
+- BOM は除去して後段へ渡します
+- 改行は LF へ正規化します
+- CRLF や混在改行、BOM 除去は parse quality の `input` 診断対象です
 
 ## 1. preprocessor
 
 - `pcpp` を条件式評価器として使います
-- `#if` / `#ifdef` / `#ifndef` / `#elif` / `#else` / `#endif` を評価します
+- 物理行ではなく logical line 単位で `#if` / `#ifdef` / `#ifndef` / `#elif` / `#else` / `#endif` を評価します
+- 行末 `\` 継続を畳んで複数行ディレクティブを扱います
 - 非選択枝と条件ディレクティブ行は空行化して行番号を維持します
 - 有効な `#define` / `#undef` は後続評価へ反映します
+- active 領域の未対応ディレクティブは保持しつつ `preprocess` 診断へ記録します
 
 ## 2. parser
 
 - 前処理後ソースを `tree-sitter` で構文解析します
-- 拡張子により C / C++ の parser を切り替えます
-- `ParsedSource` は `SourceFile` と parse tree を束ねます
-- 関数探索は `function_definition` を走査し、宣言子から関数名を特定します
+- `--language c` / `--language cpp` では指定言語へ固定します
+- `--language auto` では拡張子または parse quality で C / C++ を決めます
+- `ParsedSource` は `SourceFile`、parse tree、解決言語、quality を束ねます
+- 関数探索は `function_definition` と `template_declaration` を走査し、宣言子から関数名を特定します
+- `ERROR` / `MISSING` ノードは失敗ではなく `parse` 診断として扱います
 
 ## 3. extract_function
 
@@ -48,3 +59,4 @@
 - `flow --highlight` 指定時だけ `--track` の一致箇所を追加強調します
 - タブ展開後の表示列と行番号プレフィクス offset は render で吸収します
 - 色有無は `--color` / `--no-color` と標準出力の TTY 判定で決まります
+- parse quality が `degraded` のときだけ標準エラーへ診断と再現情報を出します

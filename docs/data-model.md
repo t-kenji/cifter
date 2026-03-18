@@ -10,6 +10,22 @@
 - `start_line`: 抽出範囲の開始行
 - `end_line`: 抽出範囲の終了行
 
+## ParseDiagnostic
+
+`ParseDiagnostic(category, code, message, details)` は parse quality の元診断です。
+
+- `category`: `language` / `parse` / `preprocess` / `input`
+- `code`: 集約用の識別子
+- `message`: 利用者向け要約
+- `details`: 補助情報
+
+## ParseQualityReport
+
+`ParseQualityReport(level, diagnostics)` は解析品質の集約結果です。
+
+- `level`: `clean` または `degraded`
+- `diagnostics`: 集約前の診断列
+
 ## ExtractedLine
 
 `ExtractedLine(line_no, text, highlights, omitted_after_indent)` は 1 行分の表示単位です。
@@ -62,4 +78,9 @@ byte offset を保持することで、複合行の一部だけを残す `path` 
 
 ## ParsedSource
 
-`ParsedSource(source, tree, language_name)` は前処理後ソースと parse tree を束ねる最上位入力です。
+`ParsedSource(source, tree, language_name, resolved_language, language_resolution, quality)` は前処理後ソースと parse tree を束ねる最上位入力です。
+
+- `language_name`: renderer 用のシンタックス名
+- `resolved_language`: 実際に採用した解析言語
+- `language_resolution`: `explicit` / `extension` / `quality`
+- `quality`: parse quality 集約結果

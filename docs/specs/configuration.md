@@ -5,6 +5,11 @@
 - `--version` は `cift {version}` を標準出力へ 1 行出力し、終了コード 0 で終了する
 - `--version` 実行時は `--source` やサブコマンドを要求しない
 - `--source PATH` は必須
+- `--language auto|c|cpp` を指定可能
+- `--language` の既定値は `auto`
+- `auto` では `.c` を C、`.cc` / `.cpp` / `.cxx` / `.c++` / `.hpp` / `.hh` / `.hxx` / `.h++` を C++ として扱う
+- `.h` と未知拡張子では、C / C++ の両方で parse quality を比較して採用言語を決める
+- `.h` で parse quality が同点なら C を優先する
 - `-D NAME[=VALUE]` は複数回指定可能
 - 出力は行番号付き text
 - ただし `flow` / `path` は、保持した元ソース行どうしが連続しない区間ごとに 1 行の省略表示を挿入できる
@@ -14,12 +19,23 @@
 - 抽出結果出力だけは `--color` / `--no-color` でシンタックスハイライト有無を制御できる
 - `--color` / `--no-color` を省略した場合、標準出力が TTY のときだけ色付きで出力する
 - 色付き出力は ANSI エスケープを含むが、可視文字列の内容と行番号契約は変えない
+- parse quality は成功時でも標準エラーへ診断を出せる
+- parse quality 診断は `degraded` のときだけ出す
+- parse quality 診断はカテゴリごとに 1 行へ集約し、続けて再現情報 1 行を出す
+- parse quality 診断は終了コードを変えない
+- 診断カテゴリは `language` / `parse` / `preprocess` / `input` の 4 種である
+- 再現情報は `source path`、解決後言語、`--language` の実効値、`-D` 一覧を含む
+- 入力文字コードは UTF-8 と UTF-8 with BOM を受理する
+- 非 UTF-8 入力は抽出失敗として扱う
+- 改行コードは LF と CRLF を受理し、内部では LF に正規化する
+- BOM 付き UTF-8、CRLF、混在改行は成功を許可するが `input` 診断対象である
 - Typer の引数エラーは終了コード 2
 - 抽出失敗、曖昧一致、未一致、DSL 不正は終了コード 1
 
 ## `function`
 
 - 必須引数は `--name`
+- `--language` を指定可能
 - `--color` / `--no-color` を指定可能
 - 指定関数の実装全体をそのまま抽出する
 - 行番号は関数定義の開始行から終了行まで連続で出力する
@@ -27,6 +43,7 @@
 ## `flow`
 
 - 必須引数は `--function`
+- `--language` を指定可能
 - `--color` / `--no-color` を指定可能
 - `--highlight` を指定したときだけ `--track` 一致箇所へ追加強調を適用する
 - 制御構造の骨格だけを残す
@@ -84,6 +101,7 @@ cift flow --function DecideState --source decide_state.c --track state
 
 - 必須引数は `--function`
 - 必須引数は `--route`
+- `--language` を指定可能
 - `--color` / `--no-color` を指定可能
 - route は `>` でネストを下る最小 DSL
 - 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION`

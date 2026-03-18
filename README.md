@@ -8,6 +8,7 @@
 - 単一の `--source` ファイルから抽出します
 - 公開サブコマンドは `function` / `flow` / `path` の 3 つです
 - 出力は元ソースと対応付け可能な行番号付き text です
+- `--language auto|c|cpp` で解析言語を制御できます
 - `-D NAME[=VALUE]` により条件分岐前処理を評価できます
 - 出力先が TTY の場合は既定でシンタックスハイライトします
 
@@ -155,6 +156,7 @@ python -m cifter --version
 
 ```sh
 cift function --name FooFunction --source examples/demo.c
+cift function --name HeaderCpp --source include/foo.h --language cpp
 ```
 
 `flow`:
@@ -175,6 +177,13 @@ cift path --function ElseRoute --source examples/demo.c --route 'else'
 ```
 
 ## Preprocessor / Track / Route
+
+`--language`:
+解析言語を `auto` / `c` / `cpp` から選びます。`.h` や未知拡張子では `auto` が parse quality の高い方を選びます。
+
+```sh
+cift function --name HeaderCpp --source include/foo.h --language cpp
+```
 
 `-D`:
 条件分岐前処理の評価に使うマクロを追加します。
@@ -198,17 +207,29 @@ cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_B
 - `case CMD_HOGE > else if errno == EINT`
 - `default`
 - `else`
+- `for`
+- `while ret > 0`
+- `do while ret > 0`
 
 ## Limitations
 
 - 対象は C/C++ のみです
 - 入力は単一ファイルのみです
 - 出力形式は text のみです
-- 入力文字コードは UTF-8 前提です
-- `.h` は現状 C 扱いです
-- `--route` は `case` / `default` / `if` / `else` / `else if` のみ対応です
+- 入力文字コードは UTF-8 または UTF-8 with BOM のみ対応です
+- 改行コードは LF と CRLF のみ対応です
+- `.h` と未知拡張子は `--language auto` で parse quality の高い方を選びます
 - `--track` は名前解決やスコープ解析を行いません
+- 演算子オーバーロード名の関数探索は未対応です
 - ループ経路、`goto` 横断、意味解析、CFG 構築、JSON 出力は対象外です
+
+## Diagnostics
+
+- 解析結果の標準出力契約は変わりません
+- 解析品質が低い成功ケースでは、標準エラーへ `quality[...]` と `repro:` を出します
+- `quality[parse]`: tree-sitter の `ERROR` / `MISSING` を検出したとき
+- `quality[preprocess]`: active 領域に未対応ディレクティブが混在したとき
+- `quality[input]`: BOM 除去や CRLF 正規化を行ったとき
 
 ## Examples
 
@@ -218,6 +239,7 @@ cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_B
 cift function --name FooFunction --source examples/demo.c
 cift function --name FooFunction --source examples/demo.c --color
 cift function --name FooFunction --source examples/demo.c --no-color
+cift function --name HeaderCpp --source include/foo.h --language cpp
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
 ```
@@ -232,6 +254,7 @@ cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP
 - [docs/pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md)
 - [docs/data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md)
 - [docs/architecture.md](/home/tkenji/Repos/cifter/docs/architecture.md)
+- [docs/performance.md](/home/tkenji/Repos/cifter/docs/performance.md)
 - [docs/release.md](/home/tkenji/Repos/cifter/docs/release.md)
 
 仕様の正本は `docs/specs/` にあります。

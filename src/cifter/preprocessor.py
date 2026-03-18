@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pcpp import Preprocessor
 
 from cifter.errors import CiftError
+from cifter.model import ParseDiagnostic
+
+CONDITIONAL_DIRECTIVES = {"if", "ifdef", "ifndef", "elif", "else", "endif"}
+SUPPORTED_DIRECTIVES = CONDITIONAL_DIRECTIVES | {"define", "undef", "include"}
 
 
 @dataclass
@@ -15,8 +19,27 @@ class _ConditionalFrame:
     saw_else: bool = False
 
 
-def preprocess_source(source: str, defines: list[str]) -> str:
-    lines = source.splitlines()
+@dataclass(frozen=True)
+class PreprocessResult:
+    text: str
+    diagnostics: tuple[ParseDiagnostic, ...]
+
+
+@dataclass(frozen=True)
+class _Directive:
+    name: str
+    body: str
+
+
+@dataclass(frozen=True)
+class _LogicalLine:
+    text: str
+    physical_lines: tuple[str, ...]
+    start_line: int
+
+
+def preprocess_source(source: str, defines: list[str]) -> PreprocessResult:
+    lines = tuple(source.splitlines())
     trailing_newline = source.endswith("\n")
     processor = Preprocessor()
     for define in defines:
@@ -24,26 +47,39 @@ def preprocess_source(source: str, defines: list[str]) -> str:
 
     output: list[str] = []
     stack: list[_ConditionalFrame] = []
+    diagnostics: list[ParseDiagnostic] = []
 
-    for line in lines:
-        directive = _parse_directive(line)
+    for logical_line in _iter_logical_lines(lines):
+        directive = _parse_directive(logical_line.text)
         active = stack[-1].current_active if stack else True
 
-        if directive is not None and directive.name in {"if", "ifdef", "ifndef", "elif", "else", "endif"}:
+        if directive is not None and directive.name in CONDITIONAL_DIRECTIVES:
             _handle_conditional_directive(processor, stack, directive)
-            output.append("")
+            output.extend("" for _ in logical_line.physical_lines)
             continue
 
         if not active:
-            output.append("")
+            output.extend("" for _ in logical_line.physical_lines)
             continue
 
         if directive is not None and directive.name == "define" and directive.body:
             processor.define(_normalize_define(directive.body))
         elif directive is not None and directive.name == "undef" and directive.body:
             processor.undef(directive.body.strip())
+        elif directive is not None and directive.name not in SUPPORTED_DIRECTIVES:
+            diagnostics.append(
+                ParseDiagnostic(
+                    category="preprocess",
+                    code="unsupported_directive",
+                    message=f"未対応ディレクティブ #{directive.name} を保持したまま解析しました",
+                    details=(
+                        ("directive", directive.name),
+                        ("line", str(logical_line.start_line)),
+                    ),
+                )
+            )
 
-        output.append(line)
+        output.extend(logical_line.physical_lines)
 
     if stack:
         raise CiftError("条件分岐ディレクティブが閉じていません")
@@ -51,13 +87,29 @@ def preprocess_source(source: str, defines: list[str]) -> str:
     text = "\n".join(output)
     if trailing_newline:
         text += "\n"
-    return text
+    return PreprocessResult(text=text, diagnostics=tuple(diagnostics))
 
 
-@dataclass(frozen=True)
-class _Directive:
-    name: str
-    body: str
+def _iter_logical_lines(lines: tuple[str, ...]) -> tuple[_LogicalLine, ...]:
+    logical_lines: list[_LogicalLine] = []
+    index = 0
+    while index < len(lines):
+        start_line = index + 1
+        physical_lines = [lines[index]]
+        logical_text = lines[index]
+        while logical_text.endswith("\\") and index + 1 < len(lines):
+            logical_text = logical_text[:-1] + lines[index + 1]
+            index += 1
+            physical_lines.append(lines[index])
+        logical_lines.append(
+            _LogicalLine(
+                text=logical_text,
+                physical_lines=tuple(physical_lines),
+                start_line=start_line,
+            )
+        )
+        index += 1
+    return tuple(logical_lines)
 
 
 def _parse_directive(line: str) -> _Directive | None:

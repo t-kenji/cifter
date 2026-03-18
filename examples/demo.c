@@ -141,3 +141,36 @@ int FlowOnlySample(AppContext *ctx)
 
     return state;
 }
+
+int Phase3PreprocessSample(AppContext *ctx, int mode)
+{
+#define LOCAL_PHASE3_STATE \
+    (300 + CMD_LOOP)
+
+#if defined(DEF_FOO) || \
+    defined(LOCAL_TRACE)
+#if defined(ENABLE_BAR) && \
+    (ENABLE_BAR == 1)
+    ctx->state = LOCAL_PHASE3_STATE;
+#else
+    ctx->state = 305;
+#endif
+#else
+    ctx->state = 301;
+#endif
+
+#ifdef LOCAL_PHASE3_STATE
+    ctx->inner.value = ctx->inner.value + 10;
+#endif
+
+#undef LOCAL_PHASE3_STATE
+
+#ifndef LOCAL_PHASE3_STATE
+    ctx->retry_count = ctx->retry_count + 1;
+#endif
+
+    if (mode > 0) {
+        return ctx->inner.value;
+    }
+    return ctx->state;
+}

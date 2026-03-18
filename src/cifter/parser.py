@@ -9,10 +9,17 @@ import tree_sitter_cpp
 from tree_sitter import Language, Node, Parser, Tree
 
 from cifter.errors import CiftError
-from cifter.model import SourceSpan
+from cifter.model import (
+    LanguageMode,
+    LanguageResolution,
+    ParseDiagnostic,
+    ParseQualityReport,
+    SourceSpan,
+)
 from cifter.preprocessor import preprocess_source
 
 CPP_EXTENSIONS = {".cc", ".cpp", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".h++"}
+QUALITY_COMPARE_EXTENSIONS = {".h"}
 
 
 @dataclass(frozen=True)
@@ -90,15 +97,49 @@ class ParsedSource:
     source: SourceFile
     tree: Tree
     language_name: str
+    resolved_language: str
+    language_resolution: LanguageResolution
+    quality: ParseQualityReport
 
 
-def parse_source(path: Path, defines: list[str]) -> ParsedSource:
-    raw_text = path.read_text(encoding="utf-8")
-    preprocessed = preprocess_source(raw_text, defines)
-    source = SourceFile.from_text(path, preprocessed)
-    parser, language_name = _build_parser(path)
-    tree = parser.parse(source.text.encode("utf-8"))
-    return ParsedSource(source=source, tree=tree, language_name=language_name)
+@dataclass(frozen=True)
+class _NormalizedInput:
+    text: str
+    diagnostics: tuple[ParseDiagnostic, ...]
+
+
+@dataclass(frozen=True)
+class _ParseMetrics:
+    has_error: bool
+    error_count: int
+    missing_count: int
+
+    def sort_key(self) -> tuple[int, int, int]:
+        return (int(self.has_error), self.error_count, self.missing_count)
+
+
+@dataclass(frozen=True)
+class _ParseAttempt:
+    language_name: str
+    tree: Tree
+    metrics: _ParseMetrics
+
+
+def parse_source(path: Path, defines: list[str], language: LanguageMode = "auto") -> ParsedSource:
+    normalized_input = _read_and_normalize_source(path)
+    preprocessed = preprocess_source(normalized_input.text, defines)
+    source = SourceFile.from_text(path, preprocessed.text)
+    attempt, resolution = _resolve_parse_attempt(path, source, language)
+    diagnostics = normalized_input.diagnostics + preprocessed.diagnostics + _parse_diagnostics(attempt.metrics)
+    quality = ParseQualityReport.from_diagnostics(diagnostics)
+    return ParsedSource(
+        source=source,
+        tree=attempt.tree,
+        language_name=attempt.language_name,
+        resolved_language=attempt.language_name,
+        language_resolution=resolution,
+        quality=quality,
+    )
 
 
 def find_function(parsed: ParsedSource, name: str) -> Node:
@@ -111,7 +152,10 @@ def find_function(parsed: ParsedSource, name: str) -> Node:
 
 
 def function_body(function_node: Node) -> Node:
-    for child in function_node.named_children:
+    definition = _function_definition_node(function_node)
+    if definition is None:
+        raise CiftError("関数本体を特定できません")
+    for child in definition.named_children:
         if child.type == "compound_statement":
             return child
     raise CiftError("関数本体を特定できません")
@@ -122,14 +166,129 @@ def node_text(source: SourceFile, node: Node) -> str:
 
 
 def condition_text(source: SourceFile, node: Node) -> str:
-    text = node_text(source, node)
-    return text
+    return node_text(source, node)
 
 
-def _build_parser(path: Path) -> tuple[Parser, str]:
-    if path.suffix.lower() in CPP_EXTENSIONS:
-        return Parser(Language(tree_sitter_cpp.language())), "cpp"
-    return Parser(Language(tree_sitter_c.language())), "c"
+def _read_and_normalize_source(path: Path) -> _NormalizedInput:
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise CiftError("入力ファイルは UTF-8 または UTF-8 BOM 付き UTF-8 である必要があります") from error
+
+    diagnostics: list[ParseDiagnostic] = []
+    if raw.startswith(b"\xef\xbb\xbf"):
+        diagnostics.append(
+            ParseDiagnostic(
+                category="input",
+                code="utf8_bom_normalized",
+                message="UTF-8 BOM を除去して解析しました",
+            )
+        )
+
+    has_crlf = "\r\n" in text
+    if "\r" in text.replace("\r\n", ""):
+        raise CiftError("改行コードは LF または CRLF のみ対応しています")
+
+    if has_crlf:
+        if "\n" in text.replace("\r\n", ""):
+            diagnostics.append(
+                ParseDiagnostic(
+                    category="input",
+                    code="mixed_newlines_normalized",
+                    message="混在した改行コードを LF へ正規化して解析しました",
+                )
+            )
+        else:
+            diagnostics.append(
+                ParseDiagnostic(
+                    category="input",
+                    code="crlf_normalized",
+                    message="CRLF を LF へ正規化して解析しました",
+                )
+            )
+        text = text.replace("\r\n", "\n")
+
+    return _NormalizedInput(text=text, diagnostics=tuple(diagnostics))
+
+
+def _resolve_parse_attempt(
+    path: Path,
+    source: SourceFile,
+    language: LanguageMode,
+) -> tuple[_ParseAttempt, LanguageResolution]:
+    if language != "auto":
+        return _parse_attempt(source.text, language), "explicit"
+
+    suffix = path.suffix.lower()
+    if suffix == ".c":
+        return _parse_attempt(source.text, "c"), "extension"
+    if suffix in CPP_EXTENSIONS:
+        return _parse_attempt(source.text, "cpp"), "extension"
+    if suffix in QUALITY_COMPARE_EXTENSIONS or suffix not in {".c", *CPP_EXTENSIONS}:
+        return _best_parse_attempt(source.text, prefer_c=suffix == ".h"), "quality"
+    return _parse_attempt(source.text, "c"), "extension"
+
+
+def _best_parse_attempt(text: str, *, prefer_c: bool) -> _ParseAttempt:
+    c_attempt = _parse_attempt(text, "c")
+    cpp_attempt = _parse_attempt(text, "cpp")
+    if c_attempt.metrics.sort_key() < cpp_attempt.metrics.sort_key():
+        return c_attempt
+    if cpp_attempt.metrics.sort_key() < c_attempt.metrics.sort_key():
+        return cpp_attempt
+    if prefer_c:
+        return c_attempt
+    return cpp_attempt
+
+
+def _parse_attempt(text: str, language_name: str) -> _ParseAttempt:
+    parser = _build_parser(language_name)
+    tree = parser.parse(text.encode("utf-8"))
+    return _ParseAttempt(language_name=language_name, tree=tree, metrics=_collect_parse_metrics(tree.root_node))
+
+
+def _collect_parse_metrics(root: Node) -> _ParseMetrics:
+    error_count = 0
+    missing_count = 0
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node.type == "ERROR":
+            error_count += 1
+        if bool(getattr(node, "is_missing", False)):
+            missing_count += 1
+        stack.extend(reversed(node.children))
+    return _ParseMetrics(has_error=root.has_error, error_count=error_count, missing_count=missing_count)
+
+
+def _parse_diagnostics(metrics: _ParseMetrics) -> tuple[ParseDiagnostic, ...]:
+    diagnostics: list[ParseDiagnostic] = []
+    if metrics.error_count:
+        diagnostics.append(
+            ParseDiagnostic(
+                category="parse",
+                code="error_nodes_detected",
+                message=f"tree-sitter の ERROR ノードを {metrics.error_count} 件検出しました",
+                details=(("count", str(metrics.error_count)),),
+            )
+        )
+    if metrics.missing_count:
+        diagnostics.append(
+            ParseDiagnostic(
+                category="parse",
+                code="missing_nodes_detected",
+                message=f"tree-sitter の MISSING ノードを {metrics.missing_count} 件検出しました",
+                details=(("count", str(metrics.missing_count)),),
+            )
+        )
+    return tuple(diagnostics)
+
+
+def _build_parser(language_name: str) -> Parser:
+    if language_name == "cpp":
+        return Parser(Language(tree_sitter_cpp.language()))
+    return Parser(Language(tree_sitter_c.language()))
 
 
 def _iter_nodes(root: Node) -> list[Node]:
@@ -143,15 +302,28 @@ def _iter_nodes(root: Node) -> list[Node]:
 
 
 def _is_function_named(node: Node, source: SourceFile, name: str) -> bool:
-    if node.type != "function_definition":
+    if node.type == "function_definition" and node.parent is not None and node.parent.type == "template_declaration":
+        return False
+    definition = _function_definition_node(node)
+    if definition is None:
         return False
     declarator = next(
-        (child for child in node.named_children if child.type.endswith("declarator")),
+        (child for child in definition.named_children if child.type.endswith("declarator")),
         None,
     )
     if declarator is None:
         return False
     return _extract_declarator_name(source, declarator) == name
+
+
+def _function_definition_node(node: Node) -> Node | None:
+    if node.type == "function_definition":
+        return node
+    if node.type == "template_declaration":
+        for child in node.named_children:
+            if child.type == "function_definition":
+                return child
+    return None
 
 
 def _extract_declarator_name(source: SourceFile, node: Node) -> str | None:

@@ -4,18 +4,35 @@
 
 > 生ソースファイル -> 条件分岐前処理 -> tree-sitter 解析 -> 抽出 -> レンダー -> 出力
 
+## 入力正規化
+
+- UTF-8 と UTF-8 with BOM を受理する
+- UTF-8 with BOM は BOM を除去して後段へ渡す
+- 非 UTF-8 は失敗する
+- LF と CRLF を受理し、内部では LF へ正規化する
+- 混在改行は許容するが parse quality へ `input` 診断を追加する
+
 ## 条件分岐前処理
 
 - `pcpp` を条件式評価器として使う
+- 物理行ではなく logical line 単位で処理する
+- logical line は行末 `\` 継続を畳んで構築する
 - 評価対象は `#if` / `#ifdef` / `#ifndef` / `#elif` / `#else` / `#endif`
-- `#include` / `#define` / `#undef` は行を保持したまま後段へ渡す
-- ただし有効な `#define` / `#undef` は後続の条件式評価には反映する
+- active な `#define` / `#undef` は、複数行でも後続の条件式評価へ反映する
+- `#include` / `#pragma` / `#error` などの非評価ディレクティブは active 領域では行を保持したまま後段へ渡す
+- active 領域の未対応ディレクティブは失敗させず、parse quality へ `preprocess` 診断を追加する
 - 無効化された枝と条件分岐ディレクティブ行は空行化する
+- 空行化は physical line ごとに行い、元行番号を維持する
 
 ## tree-sitter 解析
 
 - 前処理後ソースを tree-sitter で構文解析する
+- `--language c` / `--language cpp` 指定時は、その言語で固定して parse する
+- `--language auto` では、既知拡張子は拡張子で即決し、`.h` と未知拡張子は C / C++ の両方で parse して parse quality を比較する
+- parse quality 比較は `has_error`、`ERROR` ノード数、`MISSING` ノード数で行う
+- `.h` で parse quality が同点なら C を採用する
 - `ERROR` ノードは許容する
+- `ERROR` または `MISSING` を含む parse は parse quality へ `parse` 診断を追加する
 - 対象関数や対象枝を一意に特定できない場合だけ失敗する
 
 ## 抽出
@@ -37,6 +54,7 @@
 ## レンダーと出力
 
 - 色なし経路の正本は行番号付き text 文字列である
+- 抽出結果の標準出力契約は parse quality 診断の有無で変えない
 - `flow` / `path` は、隣接する保持行の元行番号が連続しないたびに、省略区間ごと 1 行の合成 `...` を差し込む
 - 合成 `...` 行は元ソース行番号を持たず、行番号プレフィクス相当幅の空白とコード側インデントだけを表示する
 - `...` 行のコード側インデントは、省略区間で最初に現れる非空行の先頭空白を使い、非空行がなければ直後の保持行に合わせる
@@ -47,3 +65,4 @@
 - 追加強調の適用位置は `rich` の `tab_size=4` に従って決める
 - `InlineHighlightSpan` の source 列座標から、タブ展開後の表示列と行番号プレフィクス offset への変換は renderer が行う
 - 色有無は `--color` / `--no-color` と標準出力 TTY 判定で決める
+- parse quality が `degraded` のときだけ、カテゴリ要約と再現情報を標準エラーへ出す
