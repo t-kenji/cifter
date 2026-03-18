@@ -218,6 +218,34 @@ AMBIGUOUS_FOR_SOURCE = """int AmbiguousFor(void)
 }
 """
 
+AMBIGUOUS_WHILE_SOURCE = """int AmbiguousWhile(int x)
+{
+    while (x > 0) {
+        First();
+    }
+
+    while (x > 0) {
+        Second();
+    }
+}
+"""
+
+AMBIGUOUS_CASE_SOURCE = """int AmbiguousCase(int x)
+{
+    switch (x) {
+    case STS_IDLE:
+        First();
+        break;
+    }
+
+    switch (x) {
+    case STS_IDLE:
+        Second();
+        break;
+    }
+}
+"""
+
 PREPROCESS_SOURCE = """int Flagged(void)
 {
 #if defined(DEF_FOO)

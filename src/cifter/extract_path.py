@@ -12,6 +12,7 @@ from cifter.model import (
     ExtractionResult,
     RouteSegment,
     normalize_condition_text,
+    normalize_loop_header_text,
     parse_route,
 )
 from cifter.omission import attach_omission_markers
@@ -79,7 +80,7 @@ def _collect_path_from_container(
     rendered: dict[int, _RenderedLine],
 ) -> None:
     statements = container_statements(container)
-    match = _find_unique_match(parsed, container, segments[0])
+    match = _find_first_match(parsed, container, segments[0])
     if not is_function_body(container):
         _keep_linear_statements(rendered, parsed, statements[: match.owner_index])
 
@@ -111,12 +112,10 @@ def _collect_path_from_container(
     _keep_match_closing(rendered, parsed, match)
 
 
-def _find_unique_match(parsed: ParsedSource, container: Node, segment: RouteSegment) -> _RouteMatch:
+def _find_first_match(parsed: ParsedSource, container: Node, segment: RouteSegment) -> _RouteMatch:
     matches = _find_matches(parsed, container, segment)
     if not matches:
         raise CiftError(f"route に一致する枝が見つかりません: {segment.raw}")
-    if len(matches) > 1:
-        raise CiftError(f"route に一致する枝が複数あります: {segment.raw}")
     return matches[0]
 
 
@@ -126,7 +125,7 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
     for index, statement in enumerate(statements):
         if segment.kind in {"case", "default"} and statement.type == "switch_statement":
             for case_statement in _switch_cases(statement):
-                if segment.kind == "case" and _case_label(parsed, case_statement) == segment.label:
+                if segment.kind == "case" and _case_label(parsed, case_statement) == segment.normalized_payload:
                     matches.append(
                         _RouteMatch(
                             owner=statement,
@@ -150,7 +149,9 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
                             selected_start_byte=case_statement.start_byte,
                         )
                     )
-        if segment.kind == "for" and statement.type == "for_statement":
+        if segment.kind == "for" and statement.type == "for_statement" and (
+            segment.normalized_payload is None or _normalized_for_header(parsed, statement) == segment.normalized_payload
+        ):
             matches.append(
                 _RouteMatch(
                     owner=statement,
@@ -164,7 +165,7 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
         if (
             segment.kind == "while"
             and statement.type == "while_statement"
-            and _normalized_while_condition(parsed, statement) == segment.condition
+            and (segment.normalized_payload is None or _normalized_while_condition(parsed, statement) == segment.normalized_payload)
         ):
             matches.append(
                 _RouteMatch(
@@ -179,7 +180,10 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
         if (
             segment.kind == "do_while"
             and statement.type == "do_statement"
-            and _normalized_do_while_condition(parsed, statement) == segment.condition
+            and (
+                segment.normalized_payload is None
+                or _normalized_do_while_condition(parsed, statement) == segment.normalized_payload
+            )
         ):
             matches.append(
                 _RouteMatch(
@@ -193,7 +197,7 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
             )
         if statement.type != "if_statement":
             continue
-        if segment.kind == "if" and _normalized_if_condition(parsed, statement) == segment.condition:
+        if segment.kind == "if" and _normalized_if_condition(parsed, statement) == segment.normalized_payload:
             consequence = statement.named_children[1]
             matches.append(
                 _RouteMatch(
@@ -212,7 +216,7 @@ def _find_matches(parsed: ParsedSource, container: Node, segment: RouteSegment) 
             if else_match is not None:
                 matches.append(else_match)
         if segment.kind == "else_if":
-            matches.extend(_else_if_matches(parsed, statement, index, segment.condition or ""))
+            matches.extend(_else_if_matches(parsed, statement, index, segment.normalized_payload or ""))
     return matches
 
 
@@ -437,6 +441,16 @@ def _is_default_case(case_node: Node) -> bool:
 def _normalized_if_condition(parsed: ParsedSource, if_node: Node) -> str:
     condition_node = if_node.named_children[0]
     return normalize_condition_text(condition_text(parsed.source, condition_node))
+
+
+def _normalized_for_header(parsed: ParsedSource, for_node: Node) -> str:
+    body = for_node.named_children[-1]
+    header = parsed.source.text_bytes[for_node.start_byte:body.start_byte].decode("utf-8")
+    open_index = header.find("(")
+    close_index = header.rfind(")")
+    if open_index == -1 or close_index == -1 or close_index < open_index:
+        raise CiftError("for ヘッダを特定できません")
+    return normalize_loop_header_text(header[open_index + 1 : close_index])
 
 
 def _normalized_while_condition(parsed: ParsedSource, while_node: Node) -> str:

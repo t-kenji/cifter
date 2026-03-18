@@ -171,10 +171,10 @@ cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 指定した route を細く抽出します。`--route` は複数回指定でき、複数指定時は OR で union します。親構造は残し、route 終端の文を含むコンテナでは、その直後に続く通常文だけを残します。
 
 ```sh
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > if ret == OK'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/if[ret == OK]'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
 cift path --function ElseRoute --source examples/demo.c --route 'else'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
 ```
 
 ## Preprocessor / Track / Route
@@ -206,16 +206,28 @@ cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_B
 - 1 個以上必須で、複数回指定できます
 - 複数指定時は各 route を独立に解決し、結果を OR で union します
 - 表示順は元ソース行順で、指定順には依存しません
-- 1 本でも DSL 不正、未一致、曖昧一致があれば全体が失敗します
+- 1 本でも DSL 不正または未一致があれば全体が失敗します
+- canonical form は `/` 区切りです
+- 詳細は `docs/specs/path-route-dsl.md` を参照します
 
-- `case CMD_HOGE`
-- `case CMD_HOGE > if ret == OK`
-- `case CMD_HOGE > else if errno == EINT`
+- `case[CMD_HOGE]`
+- `case[CMD_HOGE]/if[ret == OK]`
+- `case[CMD_HOGE]/else-if[errno == EINT]`
 - `default`
 - `else`
 - `for`
-- `while ret > 0`
-- `do while ret > 0`
+- `for[i = 0; i < 4; i++]`
+- `while[ret > 0]`
+- `do-while[ret > 0]`
+
+`--route` の最小サンプル集:
+
+```sh
+cift path --source examples/demo.c --function FooFunction --route 'case[CMD_HOGE]'
+cift path --source examples/demo.c --function FooFunction --route 'case[CMD_LOOP]/while'
+cift path --source examples/demo.c --function FooFunction --route 'case[CMD_LOOP]/while/if[(ctx->retry_count == 1)]'
+cift path --source examples/demo.c --function FooFunction --route 'case[CMD_HOGE]/else-if[(ret == 11)]'
+```
 
 ## Limitations
 
@@ -247,8 +259,8 @@ cift function --name FooFunction --source examples/demo.c --color
 cift function --name FooFunction --source examples/demo.c --no-color
 cift function --name HeaderCpp --source include/foo.h --language cpp
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/if[ret == OK]'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
 ```
 
 ## Development
@@ -257,6 +269,7 @@ cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP
 
 - [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
 - [docs/cli.md](/home/tkenji/Repos/cifter/docs/cli.md)
+- [docs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/path-route-dsl.md)
 - [docs/output-format.md](/home/tkenji/Repos/cifter/docs/output-format.md)
 - [docs/pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md)
 - [docs/data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md)

@@ -43,11 +43,11 @@
 
 - route DSL を `RouteSegment` 列へ変換します
 - 複数 route があるときは、各 route を独立に解決して保持行集合を union します
-- 現在コンテナ内で各 route の各 segment に一致する枝を一意に探します
+- 現在コンテナ内で各 route の各 segment に一致する枝を探し、複数あるときはソース順最初の一致を採ります
 - 選択枝のみを残し、親構造と route 終端直後の通常文脈を保ちます
 - `case` / `default` 直下が `{ ... }` ブロックでも、その内側を探索対象に含めて元の開閉を残します
-- `else if` は `else_clause` 直下の `if_statement` を 1 要素として扱います
-- `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索と描画を行います
+- `else-if[...]` は `else_clause` 直下の `if_statement` を 1 要素として扱います
+- `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` も中間コンテナとして探索と描画を行います
 - route の各段では現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたぎません
 - route 終端後の通常文保持は、同じ階層で次の分岐文またはループ文に達した時点で打ち切ります
 

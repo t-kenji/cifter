@@ -5,6 +5,7 @@
 ## 文書一覧
 
 - [cli.md](/home/tkenji/Repos/cifter/docs/cli.md): 公開コマンド、オプション、終了コード、代表的な失敗
+- [path-route-dsl.md](/home/tkenji/Repos/cifter/docs/path-route-dsl.md): `path --route` DSL の scanner、正規化、内部表現
 - [output-format.md](/home/tkenji/Repos/cifter/docs/output-format.md): 行番号付き text 出力の契約
 - [pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md): 前処理からレンダリングまでの処理順と責務
 - [data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md): 抽出結果と route / track 周辺の主要データ型

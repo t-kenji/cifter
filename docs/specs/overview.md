@@ -7,10 +7,11 @@
 
 1. この文書
 2. [configuration.md](/home/tkenji/Repos/cifter/docs/specs/configuration.md)
-3. [release.md](/home/tkenji/Repos/cifter/docs/specs/release.md)
-4. [data-model/overview.md](/home/tkenji/Repos/cifter/docs/specs/data-model/overview.md)
-5. [pipeline/overview.md](/home/tkenji/Repos/cifter/docs/specs/pipeline/overview.md)
-6. [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
+3. [path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md)
+4. [release.md](/home/tkenji/Repos/cifter/docs/specs/release.md)
+5. [data-model/overview.md](/home/tkenji/Repos/cifter/docs/specs/data-model/overview.md)
+6. [pipeline/overview.md](/home/tkenji/Repos/cifter/docs/specs/pipeline/overview.md)
+7. [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
 
 ## 対象範囲
 

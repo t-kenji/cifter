@@ -4,8 +4,10 @@ from pathlib import Path
 
 from cifter.cli import app
 from tests.support import (
+    AMBIGUOUS_CASE_SOURCE,
     AMBIGUOUS_FOR_SOURCE,
     AMBIGUOUS_SOURCE,
+    AMBIGUOUS_WHILE_SOURCE,
     BLOCK_CASE_SOURCE,
     CPP_PATH_SOURCE,
     DEFAULT_SOURCE,
@@ -26,7 +28,7 @@ def test_path_keeps_selected_case_if_branch_and_following_statements(tmp_path: P
     source = write_text_file(tmp_path, "route_tail.c", PATH_TRAILING_SOURCE)
     result = runner.invoke(
         app,
-        ["path", "--function", "RouteTail", "--source", str(source), "--route", "case 1 > if x > 0"],
+        ["path", "--function", "RouteTail", "--source", str(source), "--route", "case[1]/if[x > 0]"],
     )
     assert result.exit_code == 0
     assert "4:     case 1:" in result.stdout
@@ -50,7 +52,7 @@ def test_path_keeps_parent_if_for_else_if_segment(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "case CMD_HOGE > else if errno == EINT",
+            "case[CMD_HOGE]/else-if[errno == EINT]",
         ],
     )
     assert result.exit_code == 0
@@ -111,7 +113,7 @@ def test_path_supports_nested_route_inside_case_block(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "case REQ_A > if x > 0",
+            "case[REQ_A]/if[x > 0]",
         ],
     )
     assert result.exit_code == 0
@@ -148,7 +150,7 @@ def test_path_supports_loop_segment_before_case_route(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "else > for > case STS_IDLE",
+            "else/for/case[STS_IDLE]",
         ],
     )
     assert result.exit_code == 0
@@ -176,7 +178,7 @@ def test_path_supports_while_segment_before_case_route(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "while sts > 0 > case STS_IDLE",
+            "while[sts > 0]/case[STS_IDLE]",
         ],
     )
     assert result.exit_code == 0
@@ -199,7 +201,7 @@ def test_path_supports_do_while_segment_before_case_route(tmp_path: Path) -> Non
             "--source",
             str(source),
             "--route",
-            "do while sts > 0 > case STS_IDLE",
+            "do-while[sts > 0]/case[STS_IDLE]",
         ],
     )
     assert result.exit_code == 0
@@ -223,7 +225,7 @@ def test_path_stops_trailing_statements_before_next_branching_sibling() -> None:
             "--source",
             str(source),
             "--route",
-            "case CMD_LOOP > for",
+            "case[CMD_LOOP]/for",
         ],
     )
     assert result.exit_code == 0
@@ -246,9 +248,9 @@ def test_path_supports_multiple_routes_with_shared_ancestor() -> None:
             "--source",
             str(source),
             "--route",
-            "case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)",
+            "case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]",
             "--route",
-            "case CMD_LOOP > for",
+            "case[CMD_LOOP]/for",
         ],
     )
     assert result.exit_code == 0
@@ -277,9 +279,9 @@ def test_path_multiple_routes_merge_if_chain_siblings(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "case CMD_HOGE > else if errno == EINT",
+            "case[CMD_HOGE]/else-if[errno == EINT]",
             "--route",
-            "case CMD_HOGE > if ret == OK",
+            "case[CMD_HOGE]/if[ret == OK]",
         ],
     )
     assert result.exit_code == 0
@@ -325,13 +327,13 @@ def test_multiple_path_routes_fail_if_any_route_is_invalid(tmp_path: Path) -> No
             "--source",
             str(source),
             "--route",
-            "case CMD_HOGE > if ret == OK",
+            "case[CMD_HOGE]/if[ret == OK]",
             "--route",
-            "case CMD_HOGE > if ret == NG",
+            "case[CMD_HOGE]/if[ret == NG]",
         ],
     )
     assert result.exit_code == 1
-    assert "--route 'case CMD_HOGE > if ret == NG'" in result.stderr
+    assert "--route 'case[CMD_HOGE]/if[ret == NG]'" in result.stderr
     assert "見つかりません" in result.stderr
 
 
@@ -339,39 +341,83 @@ def test_invalid_route_fails(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "foo.c", SOURCE)
     result = runner.invoke(
         app,
-        ["path", "--function", "FooFunction", "--source", str(source), "--route", "case CMD_HOGE > else > if errno == EINT"],
+        ["path", "--function", "FooFunction", "--source", str(source), "--route", "case[CMD_HOGE] > else-if[errno == EINT]"],
     )
     assert result.exit_code == 1
-    assert "else if" in result.stderr
+    assert "不正な --route 要素" in result.stderr
 
 
 def test_path_does_not_skip_loop_implicitly(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "loop_route.c", LOOP_PATH_SOURCE)
     result = runner.invoke(
         app,
-        ["path", "--function", "LoopRoute", "--source", str(source), "--route", "else > case STS_IDLE"],
+        ["path", "--function", "LoopRoute", "--source", str(source), "--route", "else/case[STS_IDLE]"],
     )
     assert result.exit_code == 1
     assert "見つかりません" in result.stderr
 
 
-def test_ambiguous_route_fails(tmp_path: Path) -> None:
+def test_duplicate_if_route_selects_first_match(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "ambiguous.c", AMBIGUOUS_SOURCE)
-    result = runner.invoke(app, ["path", "--function", "Ambiguous", "--source", str(source), "--route", "if x > 0"])
-    assert result.exit_code == 1
-    assert "複数" in result.stderr
+    result = runner.invoke(app, ["path", "--function", "Ambiguous", "--source", str(source), "--route", "if[x > 0]"])
+    assert result.exit_code == 0
+    assert "3:     if (x > 0) {" in result.stdout
+    assert "4:         First();" in result.stdout
+    assert "7:     if (x > 0) {" not in result.stdout
+    assert "8:         Second();" not in result.stdout
 
 
-def test_ambiguous_for_route_fails(tmp_path: Path) -> None:
+def test_duplicate_for_route_selects_first_match(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "ambiguous_for.c", AMBIGUOUS_FOR_SOURCE)
     result = runner.invoke(app, ["path", "--function", "AmbiguousFor", "--source", str(source), "--route", "for"])
-    assert result.exit_code == 1
-    assert "複数" in result.stderr
+    assert result.exit_code == 0
+    assert "3:     for (;;) {" in result.stdout
+    assert "4:         First();" in result.stdout
+    assert "7:     for (;;) {" not in result.stdout
+    assert "8:         Second();" not in result.stdout
+
+
+def test_duplicate_while_route_selects_first_match(tmp_path: Path) -> None:
+    source = write_text_file(tmp_path, "ambiguous_while.c", AMBIGUOUS_WHILE_SOURCE)
+    result = runner.invoke(app, ["path", "--function", "AmbiguousWhile", "--source", str(source), "--route", "while[x > 0]"])
+    assert result.exit_code == 0
+    assert "3:     while (x > 0) {" in result.stdout
+    assert "4:         First();" in result.stdout
+    assert "7:     while (x > 0) {" not in result.stdout
+    assert "8:         Second();" not in result.stdout
+
+
+def test_duplicate_case_route_selects_first_match(tmp_path: Path) -> None:
+    source = write_text_file(tmp_path, "ambiguous_case.c", AMBIGUOUS_CASE_SOURCE)
+    result = runner.invoke(app, ["path", "--function", "AmbiguousCase", "--source", str(source), "--route", "case[STS_IDLE]"])
+    assert result.exit_code == 0
+    assert "4:     case STS_IDLE:" in result.stdout
+    assert "5:         First();" in result.stdout
+    assert "10:     case STS_IDLE:" not in result.stdout
+    assert "11:         Second();" not in result.stdout
+
+
+def test_path_supports_for_payload_route(tmp_path: Path) -> None:
+    source = demo_source()
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "FooFunction",
+            "--source",
+            str(source),
+            "--route",
+            "case[CMD_LOOP]/for[i = 0; i < 4; i++]",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "91:         for (i = 0; i < 4; i++) {" in result.stdout
 
 
 def test_cpp_path_keeps_selected_branch(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "route.cpp", CPP_PATH_SOURCE)
-    result = runner.invoke(app, ["path", "--function", "Route", "--source", str(source), "--route", "if value > 0"])
+    result = runner.invoke(app, ["path", "--function", "Route", "--source", str(source), "--route", "if[value > 0]"])
     assert result.exit_code == 0
     assert "4:     if (value > 0) {" in result.stdout
     assert "5:         return 1;" in result.stdout
@@ -389,7 +435,7 @@ def test_path_supports_qualified_case_labels(tmp_path: Path) -> None:
             "--source",
             str(source),
             "--route",
-            "case ns::State::Idle",
+            "case[ns::State::Idle]",
         ],
     )
     assert result.exit_code == 0

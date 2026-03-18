@@ -30,7 +30,7 @@
 - 改行コードは LF と CRLF を受理し、内部では LF に正規化する
 - BOM 付き UTF-8、CRLF、混在改行は成功を許可するが `input` 診断対象である
 - Typer の引数エラーは終了コード 2
-- 抽出失敗、曖昧一致、未一致、DSL 不正は終了コード 1
+- 抽出失敗、未一致、DSL 不正は終了コード 1
 
 ## `function`
 
@@ -103,22 +103,19 @@ cift flow --function DecideState --source decide_state.c --track state
 - `--route` は 1 個以上必須で、複数回指定できる
 - `--language` を指定可能
 - `--color` / `--no-color` を指定可能
-- route は `>` でネストを下る最小 DSL
-- 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION`
-- `else if CONDITION` は複合 1 要素として扱う
-- `else > if CONDITION` は DSL 不正として扱う
+- route DSL の正本は [path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) とする
 - 複数 route を指定した場合、各 route を独立に解決して OR で union する
 - 表示順は元ソース行順で、`--route` の指定順には依存しない
 - 共通祖先、重複ノード、同一行は 1 回だけ表示する
 - 選択した枝の内部にある通常文は残す
 - route 終端の文を含むコンテナでは、その直後に続く通常文を残す
 - 同じ階層で次の分岐文またはループ文に達した時点で、route 終端後の通常文保持は打ち切る
-- `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
+- `else` / `else-if[...]` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
-- `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索できる
+- `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` も中間コンテナとして探索できる
 - route の探索対象は常に現在コンテナの直下文だけで、loop や branch を暗黙にはまたがない
-- 各 route の各段で一致候補はちょうど 1 個でなければならない
-- 1 本でも DSL 不正、未一致、曖昧一致があれば全体を失敗とする
+- 各 route の各段で一致候補が複数ある場合は、ソース順最初の一致を採用する
+- 1 本でも DSL 不正または未一致があれば全体を失敗とする
 - 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
 
 例:
@@ -141,7 +138,7 @@ int RouteTail(int x)
 ```
 
 ```sh
-cift path --function RouteTail --source route_tail.c --route 'case 1 > if x > 0'
+cift path --function RouteTail --source route_tail.c --route 'case[1]/if[x > 0]'
 ```
 
 ```text
@@ -193,7 +190,7 @@ cift path --function ElseRoute --source else_route.c --route 'else'
 ```
 
 ```sh
-cift path --function FooFunction --source foo.c --route 'case CMD_HOGE > else if errno == EINT'
+cift path --function FooFunction --source foo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
 ```
 
 ```text
@@ -222,7 +219,7 @@ int LoopRoute(int sts)
 ```
 
 ```sh
-cift path --function LoopRoute --source loop_route.c --route 'else > for > case STS_IDLE'
+cift path --function LoopRoute --source loop_route.c --route 'else/for/case[STS_IDLE]'
 ```
 
 ```text
@@ -243,8 +240,8 @@ cift path --function LoopRoute --source loop_route.c --route 'else > for > case 
 
 ```sh
 cift path --function FooFunction --source examples/demo.c \
-  --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' \
-  --route 'case CMD_LOOP > for'
+  --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' \
+  --route 'case[CMD_LOOP]/for'
 ```
 
 ```text

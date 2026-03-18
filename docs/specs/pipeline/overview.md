@@ -46,13 +46,14 @@
 - `path` は選択した枝の内部にある通常文を残す
 - `path` は route 終端の文を含むコンテナで、その直後に続く通常文を残す
 - `path` は同じ階層で次の分岐文またはループ文に達した時点で、route 終端後の通常文保持を打ち切る
-- `path` で `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
+- `path` で `else` / `else-if[...]` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `path` は親構造の開閉と元行番号を維持したまま、非選択枝だけを落とす
 - `path` は共通祖先、重複ノード、同一行を 1 回だけ描画する
 - `path` の `case` / `default` も、必要なら直下の `{ ... }` を中間コンテナとして探索と描画を行う
-- `else if CONDITION` は AST 上の `else_clause` 直下 `if_statement` を 1 要素として照合する
-- `path` の `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索と描画を行う
+- `else-if[...]` は AST 上の `else_clause` 直下 `if_statement` を 1 要素として照合する
+- `path` の `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` も中間コンテナとして探索と描画を行う
 - `path` は各 route の各段で現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたがない
+- `path` は各段で一致候補が複数あっても失敗せず、ソース順最初の一致を採用する
 
 ## レンダーと出力
 

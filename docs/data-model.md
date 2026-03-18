@@ -62,8 +62,10 @@
 `RouteSegment` は `path --route` を 1 要素ずつ分解した内部表現です。
 
 - kind は `case` / `default` / `if` / `else` / `else_if` / `for` / `while` / `do_while`
-- `case LABEL` は `label` を持ちます
-- `if CONDITION` / `else if CONDITION` / `while CONDITION` / `do while CONDITION` は正規化済み `condition` を持ちます
+- `raw` は利用者入力の 1 segment です
+- `payload` は `[]` 内の生文字列です。payload なしなら `None` です
+- `normalized_payload` は kind ごとの比較用正規化結果です
+- 外部 DSL の canonical form は [docs/specs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) を参照します
 
 ## SourceFile
 

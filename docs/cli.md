@@ -43,8 +43,9 @@
 - `--route` は 1 個以上必須で、複数回指定できます
 - `--language` で解析言語を固定できます
 - `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
-- route は `>` でネストを下る最小 DSL です
-- `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION` を扱います
+- route は `/` 区切りの canonical DSL です
+- segment は `case[...]` / `default` / `if[...]` / `else` / `else-if[...]` / `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` を扱います
+- 詳細は [docs/specs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) を参照します
 - 複数指定時は各 route を独立に解決し、結果を OR で union します
 - 表示順は元ソース行順で、指定順には依存しません
 - route 終端後は、その直後に続く通常文だけを残し、同じ階層で次の分岐文またはループ文に達した時点で打ち切ります
@@ -53,14 +54,14 @@
 ## 終了コード
 
 - Typer の引数エラーは終了コード `2`
-- 抽出失敗、曖昧一致、未一致、DSL 不正は終了コード `1`
+- 抽出失敗、未一致、DSL 不正は終了コード `1`
 - 正常終了は終了コード `0`
 
 ## エラーモデル
 
 - 利用者向けの失敗は `CiftError` に集約します
 - CLI は `CiftError.message` を標準エラーへ出し、終了コード `1` で終了します
-- route 不正、関数未検出、曖昧一致、前処理ディレクティブ不整合が主な失敗要因です
+- route 不正、関数未検出、未一致、前処理ディレクティブ不整合が主な失敗要因です
 - 成功時でも parse quality が `degraded` なら `quality[...]` と `repro:` を標準エラーへ出します
 - `preprocess` 診断は、active 領域に本当に未対応な directive が残った場合だけ出します
 
@@ -71,6 +72,6 @@ cift --version
 cift function --name FooFunction --source examples/demo.c
 cift function --name HeaderCpp --source include/foo.h --language cpp
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'
-cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
+cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
 ```

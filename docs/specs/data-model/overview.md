@@ -43,24 +43,22 @@
 
 ## `RouteSegment`
 
-- `case LABEL`
-- `default`
-- `if CONDITION`
-- `else`
-- `else if CONDITION`
-- `for`
-- `while CONDITION`
-- `do while CONDITION`
+- `kind` は `case` / `default` / `if` / `else` / `else_if` / `for` / `while` / `do_while`
+- `raw` は利用者入力の 1 segment
+- `payload` は `[]` 内の生文字列で、payload なしなら `None`
+- `normalized_payload` は比較用正規化結果で、不要なら `None`
+- 外部 DSL の canonical form は [path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) を参照する
 
 ### 条件比較
 
-- `if CONDITION` / `else if CONDITION` / `while CONDITION` / `do while CONDITION` の `CONDITION` は外側丸括弧と空白だけ正規化する
+- `if[...]` / `else-if[...]` / `while[...]` / `do-while[...]` の payload は外側丸括弧と空白だけ正規化する
+- `for[...]` は空白だけ正規化する
 - それ以外の意味同値性は扱わない
 
 ### 一致方針
 
-- 各 route の各段で一致候補はちょうど 1 個でなければならない
-- 0 個または複数候補なら失敗する
+- 各 route の各段で一致候補が複数ある場合はソース順最初の一致を採用する
+- 0 個だけが失敗条件である
 - 探索対象は常に現在コンテナの直下文だけで、子孫ノードは暗黙探索しない
 
 ## `SourceFile`
