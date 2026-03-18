@@ -11,6 +11,7 @@ from tests.support import (
     EXPECTED_VERSION,
     HEADER_CPP_SOURCE,
     SOURCE,
+    normalize_help_output,
     runner,
     write_text_file,
 )
@@ -28,7 +29,7 @@ def test_help_lists_language_option_for_all_subcommands() -> None:
     for command in ("function", "flow", "path"):
         result = runner.invoke(app, [command, "--help"])
         assert result.exit_code == 0
-        assert "--language" in result.stdout
+        assert "--language" in normalize_help_output(result.stdout)
 
 
 def test_cli_language_option_overrides_header_detection(tmp_path: Path) -> None:
@@ -80,8 +81,9 @@ def test_subcommand_help_lists_color_options() -> None:
     for command in ("function", "flow", "path"):
         result = runner.invoke(app, [command, "--help"])
         assert result.exit_code == 0
-        assert "--color" in result.stdout
-        assert "--no-color" in result.stdout
+        help_text = normalize_help_output(result.stdout)
+        assert "--color" in help_text
+        assert "--no-color" in help_text
 
 
 def test_flow_help_lists_highlight_option_only_for_flow() -> None:
@@ -92,9 +94,29 @@ def test_flow_help_lists_highlight_option_only_for_flow() -> None:
     assert flow_result.exit_code == 0
     assert function_result.exit_code == 0
     assert path_result.exit_code == 0
-    assert "--highlight" in flow_result.stdout
-    assert "--highlight" not in function_result.stdout
-    assert "--highlight" not in path_result.stdout
+    assert "--highlight" in normalize_help_output(flow_result.stdout)
+    assert "--highlight" not in normalize_help_output(function_result.stdout)
+    assert "--highlight" not in normalize_help_output(path_result.stdout)
+
+
+def test_help_option_assertions_are_stable_when_force_color_is_enabled() -> None:
+    env = {"FORCE_COLOR": "1", "TERM": "xterm-256color"}
+
+    for command in ("function", "flow", "path"):
+        result = runner.invoke(app, [command, "--help"], env=env)
+        assert result.exit_code == 0
+        help_text = normalize_help_output(result.stdout)
+        assert "--language" in help_text
+        assert "--color" in help_text
+        assert "--no-color" in help_text
+
+    flow_result = runner.invoke(app, ["flow", "--help"], env=env)
+    function_result = runner.invoke(app, ["function", "--help"], env=env)
+    path_result = runner.invoke(app, ["path", "--help"], env=env)
+
+    assert "--highlight" in normalize_help_output(flow_result.stdout)
+    assert "--highlight" not in normalize_help_output(function_result.stdout)
+    assert "--highlight" not in normalize_help_output(path_result.stdout)
 
 
 def test_cli_version_prints_project_version() -> None:

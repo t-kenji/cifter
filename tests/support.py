@@ -6,6 +6,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
 
 def _read_expected_version() -> str:
     pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -13,6 +15,10 @@ def _read_expected_version() -> str:
     version = data["project"]["version"]
     assert isinstance(version, str)
     return f"cift {version}"
+
+
+def normalize_help_output(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
 
 
 runner = CliRunner()
