@@ -100,19 +100,25 @@ cift flow --function DecideState --source decide_state.c --track state
 ## `path`
 
 - 必須引数は `--function`
-- 必須引数は `--route`
+- `--route` は 1 個以上必須で、複数回指定できる
 - `--language` を指定可能
 - `--color` / `--no-color` を指定可能
 - route は `>` でネストを下る最小 DSL
 - 対応要素は `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION`
 - `else if CONDITION` は複合 1 要素として扱う
 - `else > if CONDITION` は DSL 不正として扱う
+- 複数 route を指定した場合、各 route を独立に解決して OR で union する
+- 表示順は元ソース行順で、`--route` の指定順には依存しない
+- 共通祖先、重複ノード、同一行は 1 回だけ表示する
 - 選択した枝の内部にある通常文は残す
-- route が終端に達したコンテナでは、その後に直列で続く通常文を残す
+- route 終端の文を含むコンテナでは、その直後に続く通常文を残す
+- 同じ階層で次の分岐文またはループ文に達した時点で、route 終端後の通常文保持は打ち切る
 - `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
 - `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索できる
 - route の探索対象は常に現在コンテナの直下文だけで、loop や branch を暗黙にはまたがない
+- 各 route の各段で一致候補はちょうど 1 個でなければならない
+- 1 本でも DSL 不正、未一致、曖昧一致があれば全体を失敗とする
 - 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
 
 例:
@@ -233,4 +239,40 @@ cift path --function LoopRoute --source loop_route.c --route 'else > for > case 
 11:         }
 12:     }
 13: }
+```
+
+```sh
+cift path --function FooFunction --source examples/demo.c \
+  --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' \
+  --route 'case CMD_LOOP > for'
+```
+
+```text
+47: int FooFunction(AppContext *ctx, int command)
+48: {
+        ...
+67:     switch (command) {
+        ...
+90:     case CMD_LOOP:
+91:         for (i = 0; i < 4; i++) {
+92:             if (i == 1) {
+93:                 continue;
+94:             }
+95:             ret = PollWork(ctx, i);
+96:             if (ret == OK) {
+97:                 break;
+98:             }
+99:         }
+        ...
+101:        while (ctx->retry_count < 2) {
+102:            ctx->retry_count = ctx->retry_count + 1;
+103:            if (ctx->retry_count == 1) {
+104:                continue;
+105:            }
+106:            break;
+107:        }
+        ...
+119:    }
+        ...
+128: }
 ```

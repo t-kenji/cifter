@@ -902,6 +902,140 @@ def test_path_supports_do_while_segment_before_case_route(tmp_path: Path) -> Non
     assert "9:     } while ((sts > 0));" in result.stdout
 
 
+def test_path_stops_trailing_statements_before_next_branching_sibling() -> None:
+    source = _demo_source()
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "FooFunction",
+            "--source",
+            str(source),
+            "--route",
+            "case CMD_LOOP > for",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "90:     case CMD_LOOP:" in result.stdout
+    assert "91:         for (i = 0; i < 4; i++) {" in result.stdout
+    assert "99:         }" in result.stdout
+    assert "101:        while (ctx->retry_count < 2) {" not in result.stdout
+    assert "109:        do {" not in result.stdout
+    assert "112:        break;" not in result.stdout
+
+
+def test_path_supports_multiple_routes_with_shared_ancestor() -> None:
+    source = _demo_source()
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "FooFunction",
+            "--source",
+            str(source),
+            "--route",
+            "case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)",
+            "--route",
+            "case CMD_LOOP > for",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout.count("90:     case CMD_LOOP:") == 1
+    assert "91:         for (i = 0; i < 4; i++) {" in result.stdout
+    assert "101:         while (ctx->retry_count < 2) {" in result.stdout
+    assert "103:" in result.stdout
+    assert "if (ctx->retry_count == 1) {" in result.stdout
+    assert "106:" in result.stdout
+    assert "break;" in result.stdout
+    assert "109:        do {" not in result.stdout
+    assert "112:        break;" not in result.stdout
+    assert result.stdout.index("91:         for (i = 0; i < 4; i++) {") < result.stdout.index(
+        "101:         while (ctx->retry_count < 2) {"
+    )
+
+
+def test_path_multiple_routes_merge_if_chain_siblings(tmp_path: Path) -> None:
+    source = _write(tmp_path, "foo.c", SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "FooFunction",
+            "--source",
+            str(source),
+            "--route",
+            "case CMD_HOGE > else if errno == EINT",
+            "--route",
+            "case CMD_HOGE > if ret == OK",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout.count("13:         if (ret == OK) {") == 1
+    assert "14:             state = DONE;" in result.stdout
+    assert "15:             return state;" in result.stdout
+    assert "16:         } else if (errno == EINT) {" in result.stdout
+    assert "17:             state = RETRY;" in result.stdout
+    assert "18:             return -2;" in result.stdout
+    assert "} else {" not in result.stdout
+
+
+def test_path_duplicate_routes_do_not_duplicate_output(tmp_path: Path) -> None:
+    source = _write(tmp_path, "else_route.c", ELSE_SOURCE)
+    single = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "ElseRoute",
+            "--source",
+            str(source),
+            "--route",
+            "else",
+        ],
+    )
+    duplicate = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "ElseRoute",
+            "--source",
+            str(source),
+            "--route",
+            "else",
+            "--route",
+            "else",
+        ],
+    )
+    assert single.exit_code == 0
+    assert duplicate.exit_code == 0
+    assert duplicate.stdout == single.stdout
+
+
+def test_multiple_path_routes_fail_if_any_route_is_invalid(tmp_path: Path) -> None:
+    source = _write(tmp_path, "foo.c", SOURCE)
+    result = runner.invoke(
+        app,
+        [
+            "path",
+            "--function",
+            "FooFunction",
+            "--source",
+            str(source),
+            "--route",
+            "case CMD_HOGE > if ret == OK",
+            "--route",
+            "case CMD_HOGE > if ret == NG",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "--route 'case CMD_HOGE > if ret == NG'" in result.stderr
+    assert "見つかりません" in result.stderr
+
+
 def test_invalid_route_fails(tmp_path: Path) -> None:
     source = _write(tmp_path, "foo.c", SOURCE)
     result = runner.invoke(
@@ -1410,6 +1544,10 @@ def _write(tmp_path: Path, name: str, content: str) -> Path:
     path = tmp_path / name
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _demo_source() -> Path:
+    return Path(__file__).resolve().parents[1] / "examples" / "demo.c"
 
 
 def _write_bytes(tmp_path: Path, name: str, content: bytes) -> Path:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from tree_sitter import Node
@@ -28,14 +29,23 @@ class _RouteMatch:
     selected_start_byte: int | None = None
 
 
-def extract_path(parsed: ParsedSource, function_name: str, route: str) -> ExtractionResult:
+def extract_path(parsed: ParsedSource, function_name: str, routes: Sequence[str]) -> ExtractionResult:
+    route_values = tuple(routes)
+    if not route_values:
+        raise CiftError("空の --route は指定できません")
     function_node = find_function(parsed, function_name)
-    segments = parse_route(route)
     body = function_body(function_node)
     rendered: dict[int, str] = {}
     _keep_original_range(rendered, parsed, function_node.start_point.row + 1, body.start_point.row + 1)
-    rendered[body.end_point.row + 1] = parsed.source.line_text(body.end_point.row + 1)
-    _collect_path_from_container(parsed, body, segments, rendered)
+    _record_original_line(rendered, parsed, body.end_point.row + 1)
+    for route in route_values:
+        route_rendered: dict[int, str] = {}
+        try:
+            segments = parse_route(route)
+            _collect_path_from_container(parsed, body, segments, route_rendered)
+        except CiftError as error:
+            raise CiftError(f"--route {route!r}: {error.message}") from error
+        _merge_rendered(rendered, route_rendered)
     line_numbers = sorted(rendered)
     lines = tuple(ExtractedLine(line_no=line_no, text=rendered[line_no]) for line_no in line_numbers)
     lines = attach_omission_markers(parsed.source, lines)
@@ -55,16 +65,16 @@ def _collect_path_from_container(
 
     if match.kind == "case":
         _render_switch_context(rendered, parsed, match.owner)
-        rendered[match.header_start_line] = parsed.source.line_text(match.header_start_line)
+        _record_original_line(rendered, parsed, match.header_start_line)
         body = _case_body_container(match.branch)
         if len(segments) == 1:
             _keep_full_statement(rendered, parsed, match.branch)
             return
         if body is not match.branch:
-            rendered[body.start_point.row + 1] = parsed.source.line_text(body.start_point.row + 1)
+            _record_original_line(rendered, parsed, body.start_point.row + 1)
         _collect_path_from_container(parsed, body, segments[1:], rendered)
         if body is not match.branch:
-            rendered[body.end_point.row + 1] = parsed.source.line_text(body.end_point.row + 1)
+            _record_original_line(rendered, parsed, body.end_point.row + 1)
         return
 
     if match.kind in {"if", "else", "else_if"}:
@@ -74,7 +84,7 @@ def _collect_path_from_container(
 
     if len(segments) == 1:
         _keep_match_body(rendered, parsed, match)
-        _keep_linear_statements(rendered, parsed, statements[match.owner_index + 1 :])
+        _keep_trailing_linear_statements(rendered, parsed, statements[match.owner_index + 1 :])
         return
 
     _collect_path_from_container(parsed, match.branch, segments[1:], rendered)
@@ -249,12 +259,12 @@ def _keep_match_body(rendered: dict[int, str], parsed: ParsedSource, match: _Rou
         return
     _keep_original_range(rendered, parsed, branch.start_point.row + 1, branch.end_point.row + 1)
     if match.kind == "do_while":
-        rendered[match.owner.end_point.row + 1] = parsed.source.line_text(match.owner.end_point.row + 1)
+        _record_original_line(rendered, parsed, match.owner.end_point.row + 1)
 
 
 def _keep_match_closing(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
     if match.kind == "do_while":
-        rendered[match.owner.end_point.row + 1] = parsed.source.line_text(match.owner.end_point.row + 1)
+        _record_original_line(rendered, parsed, match.owner.end_point.row + 1)
         return
     _keep_compound_closing(rendered, parsed, match.branch, match.trim_end_byte)
 
@@ -266,7 +276,7 @@ def _keep_full_statement(rendered: dict[int, str], parsed: ParsedSource, stateme
 def _render_switch_context(rendered: dict[int, str], parsed: ParsedSource, switch_node: Node) -> None:
     body = switch_node.named_children[-1]
     _keep_original_range(rendered, parsed, switch_node.start_point.row + 1, body.start_point.row + 1)
-    rendered[body.end_point.row + 1] = parsed.source.line_text(body.end_point.row + 1)
+    _record_original_line(rendered, parsed, body.end_point.row + 1)
 
 
 def _render_if_context(rendered: dict[int, str], parsed: ParsedSource, match: _RouteMatch) -> None:
@@ -326,9 +336,9 @@ def _keep_compound_closing(
         return
     line_no = branch.end_point.row + 1
     if trim_end_byte is None:
-        rendered[line_no] = parsed.source.line_text(line_no)
+        _record_original_line(rendered, parsed, line_no)
         return
-    rendered[line_no] = parsed.source.slice_from_line_start(line_no, trim_end_byte)
+    _record_line(rendered, line_no, parsed.source.slice_from_line_start(line_no, trim_end_byte))
 
 
 def _keep_linear_statements(
@@ -341,6 +351,17 @@ def _keep_linear_statements(
             _keep_full_statement(rendered, parsed, statement)
 
 
+def _keep_trailing_linear_statements(
+    rendered: dict[int, str],
+    parsed: ParsedSource,
+    statements: list[Node],
+) -> None:
+    for statement in statements:
+        if _is_branching_statement(statement):
+            return
+        _keep_full_statement(rendered, parsed, statement)
+
+
 def _keep_original_range(
     rendered: dict[int, str],
     parsed: ParsedSource,
@@ -348,7 +369,22 @@ def _keep_original_range(
     end_line: int,
 ) -> None:
     for line_no in range(start_line, end_line + 1):
-        rendered[line_no] = parsed.source.line_text(line_no)
+        _record_original_line(rendered, parsed, line_no)
+
+
+def _record_original_line(rendered: dict[int, str], parsed: ParsedSource, line_no: int) -> None:
+    _record_line(rendered, line_no, parsed.source.line_text(line_no))
+
+
+def _record_line(rendered: dict[int, str], line_no: int, text: str) -> None:
+    rendered[line_no] = text
+
+
+def _merge_rendered(rendered: dict[int, str], route_rendered: dict[int, str]) -> None:
+    for line_no, text in route_rendered.items():
+        current = rendered.get(line_no)
+        if current is None or len(text) > len(current):
+            rendered[line_no] = text
 
 
 def _container_statements(container: Node) -> list[Node]:

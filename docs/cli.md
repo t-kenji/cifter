@@ -39,11 +39,14 @@
 `path`:
 
 - 必須引数は `--function`
-- 必須引数は `--route`
+- `--route` は 1 個以上必須で、複数回指定できます
 - `--language` で解析言語を固定できます
 - `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
 - route は `>` でネストを下る最小 DSL です
 - `case LABEL` / `default` / `if CONDITION` / `else` / `else if CONDITION` / `for` / `while CONDITION` / `do while CONDITION` を扱います
+- 複数指定時は各 route を独立に解決し、結果を OR で union します
+- 表示順は元ソース行順で、指定順には依存しません
+- route 終端後は、その直後に続く通常文だけを残し、同じ階層で次の分岐文またはループ文に達した時点で打ち切ります
 - 省略された区間は `...` の合成行で表示します
 
 ## 終了コード
@@ -67,4 +70,5 @@ cift function --name FooFunction --source examples/demo.c
 cift function --name HeaderCpp --source include/foo.h --language cpp
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
 ```

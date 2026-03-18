@@ -61,9 +61,9 @@
 
 `RouteSegment` は `path --route` を 1 要素ずつ分解した内部表現です。
 
-- kind は `case` / `default` / `if` / `else` / `else_if`
+- kind は `case` / `default` / `if` / `else` / `else_if` / `for` / `while` / `do_while`
 - `case LABEL` は `label` を持ちます
-- `if CONDITION` と `else if CONDITION` は正規化済み `condition` を持ちます
+- `if CONDITION` / `else if CONDITION` / `while CONDITION` / `do while CONDITION` は正規化済み `condition` を持ちます
 
 ## SourceFile
 

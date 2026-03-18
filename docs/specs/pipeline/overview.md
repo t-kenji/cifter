@@ -41,15 +41,18 @@
 - `flow` は制御構造骨格と `--track` 一致文を返す
 - `flow` は `--highlight` かつ色付き経路のときだけ `--track` 一致箇所の元ソース範囲を抽出結果へ保持する
 - `flow` の `case` / `default` は、必要なら直下の `{ ... }` を中間コンテナとして辿り、元行番号を保ったまま骨格を残す
-- `path` は route に沿う枝だけを返し、非選択 sibling branch は削る
+- `path` は各 route に沿う枝だけを返し、どの route でも選ばれなかった sibling branch は削る
+- 複数 route を指定した場合、各 route を独立に解決して保持行集合を union する
 - `path` は選択した枝の内部にある通常文を残す
-- `path` は route が終端に達したコンテナでは、その後に直列で続く通常文を残す
+- `path` は route 終端の文を含むコンテナで、その直後に続く通常文を残す
+- `path` は同じ階層で次の分岐文またはループ文に達した時点で、route 終端後の通常文保持を打ち切る
 - `path` で `else` / `else if CONDITION` を選んだ場合も、対応する親 `if` ヘッダを残す
 - `path` は親構造の開閉と元行番号を維持したまま、非選択枝だけを落とす
+- `path` は共通祖先、重複ノード、同一行を 1 回だけ描画する
 - `path` の `case` / `default` も、必要なら直下の `{ ... }` を中間コンテナとして探索と描画を行う
 - `else if CONDITION` は AST 上の `else_clause` 直下 `if_statement` を 1 要素として照合する
 - `path` の `for` / `while CONDITION` / `do while CONDITION` も中間コンテナとして探索と描画を行う
-- `path` は route の各段で現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたがない
+- `path` は各 route の各段で現在コンテナ直下の文だけを照合し、loop や branch を暗黙にはまたがない
 
 ## レンダーと出力
 

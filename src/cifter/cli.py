@@ -125,7 +125,7 @@ def flow_command(
 def path_command(
     function_name: Annotated[str, typer.Option("--function", help="対象関数名")],
     source: SourceOption,
-    route: Annotated[str, typer.Option("--route", help="抽出する経路 DSL")],
+    route: Annotated[list[str], typer.Option("--route", help="抽出する経路 DSL")],
     language: LanguageOption = "auto",
     color: ColorOption = None,
     defines: Annotated[

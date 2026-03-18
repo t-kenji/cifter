@@ -168,12 +168,13 @@ cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 ```
 
 `path`:
-指定した route だけを細く抽出します。親構造は残し、route 終端に達したコンテナでは後続の通常文も残します。
+指定した route を細く抽出します。`--route` は複数回指定でき、複数指定時は OR で union します。親構造は残し、route 終端の文を含むコンテナでは、その直後に続く通常文だけを残します。
 
 ```sh
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > if ret == OK'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_HOGE > else if errno == EINT'
 cift path --function ElseRoute --source examples/demo.c --route 'else'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
 ```
 
 ## Preprocessor / Track / Route
@@ -201,6 +202,11 @@ cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_B
 
 `--route`:
 `path` で辿る最小 DSL です。
+
+- 1 個以上必須で、複数回指定できます
+- 複数指定時は各 route を独立に解決し、結果を OR で union します
+- 表示順は元ソース行順で、指定順には依存しません
+- 1 本でも DSL 不正、未一致、曖昧一致があれば全体が失敗します
 
 - `case CMD_HOGE`
 - `case CMD_HOGE > if ret == OK`
@@ -242,6 +248,7 @@ cift function --name FooFunction --source examples/demo.c --no-color
 cift function --name HeaderCpp --source include/foo.h --language cpp
 cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
 cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > if ret == OK'
+cift path --function FooFunction --source examples/demo.c --route 'case CMD_LOOP > while (ctx->retry_count < 2) > if (ctx->retry_count == 1)' --route 'case CMD_LOOP > for'
 ```
 
 ## Development
