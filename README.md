@@ -42,7 +42,8 @@ python -m cifter --version
 
 ## README 内サンプルソース
 
-次の最小サンプルを `sample.c` として使います。
+README では次の最小サンプルを使います。
+同じ内容を [examples/quickstart/decide_mode.c](examples/quickstart/decide_mode.c) に置いています。
 
 ```c
 int DecideMode(int value)
@@ -66,14 +67,14 @@ int DecideMode(int value)
 関数全体を丸ごと見たいとき:
 
 ```sh
-cift function DecideMode sample.c --format text
+cift function DecideMode examples/quickstart/decide_mode.c --format text
 ```
 
 ```text
-1: int DecideMode(int value)
-2: {
+ 1: int DecideMode(int value)
+ 2: {
 ...
-13: }
+14: }
 ```
 
 関数の本体をそのまま確認したいときに使います。
@@ -81,16 +82,15 @@ cift function DecideMode sample.c --format text
 分岐の流れをざっと見たいとき:
 
 ```sh
-cift flow DecideMode sample.c --track state --format text
+cift flow DecideMode examples/quickstart/decide_mode.c --track state --format text
 ```
 
 ```text
-1: int DecideMode(int value)
-2: {
-3:     int state = 0;
-4:     if (value > 10) {
+ 1: int DecideMode(int value)
+ 2: {
+ 3:     int state = 0;
 ...
-12:     return state;
+13:     return state;
 ```
 
 `state` に関係する行と、`if / else if / else` の骨格を残して読みやすくします。
@@ -98,17 +98,17 @@ cift flow DecideMode sample.c --track state --format text
 特定の分岐だけを見たいとき:
 
 ```sh
-cift route DecideMode sample.c --route 'else-if[value == 10]' --format text
+cift route DecideMode examples/quickstart/decide_mode.c --route 'else-if[value == 10]' --format text
 ```
 
 ```text
-1: int DecideMode(int value)
-2: {
+ 1: int DecideMode(int value)
+ 2: {
 ...
-6:     } else if (value == 10) {
-7:         state = 2;
+ 7:     } else if (value == 10) {
+ 8:         state = 2;
 ...
-12:     return state;
+13:     return state;
 ```
 
 `else if` の枝だけを確認したい、のような場面に向いています。
@@ -116,12 +116,54 @@ cift route DecideMode sample.c --route 'else-if[value == 10]' --format text
 検索結果をそのまま渡したいとき:
 
 ```sh
-rg -l 'DecideMode' . | cift function DecideMode --files-from - --format json
+rg -l 'MirrorValue' examples/multi_input | cift function MirrorValue --files-from - --format json
 ```
 
 `--files-from -` を使うと、標準入力から path 一覧を受け取れます。
 
-より大きい例を見たい場合は [examples/demo.c](examples/demo.c) を参照してください。
+## Examples
+
+最小の単一 file:
+
+- [examples/quickstart/decide_mode.c](examples/quickstart/decide_mode.c)
+
+C の網羅例:
+
+- [examples/showcase/c/control_flow.c](examples/showcase/c/control_flow.c)
+- [examples/showcase/c/preprocess.c](examples/showcase/c/preprocess.c)
+
+```sh
+cift flow DispatchCommand examples/showcase/c/control_flow.c --track 'ctx->state' --track ret --highlight --format text
+cift route DispatchCommand examples/showcase/c/control_flow.c \
+  --route 'case[CMD_HOGE]/else-if[ret == RETRY_LATER]' \
+  --route 'case[CMD_LOOP]/while/if[ctx->retry_count == 1]' \
+  --format text
+cift function ConfigureBuild examples/showcase/c/preprocess.c \
+  -D ENABLE_FAST_PATH -D FEATURE_LEVEL=2 --format text
+```
+
+C++ の例:
+
+- [examples/showcase/cpp/member_workflow.cpp](examples/showcase/cpp/member_workflow.cpp)
+- [examples/showcase/cpp/route_cases.cpp](examples/showcase/cpp/route_cases.cpp)
+
+```sh
+cift function Process examples/showcase/cpp/member_workflow.cpp --format text
+cift function PickNonZero examples/showcase/cpp/member_workflow.cpp --format text
+cift route RouteMode examples/showcase/cpp/route_cases.cpp --route else --format text
+cift route QualifiedDispatch examples/showcase/cpp/route_cases.cpp --route 'case[ns::State::Busy]' --format text
+```
+
+複数入力の例:
+
+- [examples/multi_input/alpha.c](examples/multi_input/alpha.c)
+- [examples/multi_input/beta.cpp](examples/multi_input/beta.cpp)
+- [examples/multi_input/targets.txt](examples/multi_input/targets.txt)
+
+```sh
+cift function MirrorValue examples/multi_input --format json
+cift function MirrorValue --files-from examples/multi_input/targets.txt --format json
+```
 
 ## Commands
 

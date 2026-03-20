@@ -1,0 +1,2 @@
+examples/multi_input/alpha.c
+examples/multi_input/beta.cpp

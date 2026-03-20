@@ -467,8 +467,12 @@ def write_bytes_file(tmp_path: Path, name: str, content: bytes) -> Path:
     return path
 
 
-def demo_source() -> Path:
-    return Path(__file__).resolve().parents[1] / "examples" / "demo.c"
+def example_root() -> Path:
+    return Path(__file__).resolve().parents[1] / "examples"
+
+
+def example_path(*parts: str) -> Path:
+    return example_root().joinpath(*parts)
 
 
 def strip_ansi(text: str) -> str:
