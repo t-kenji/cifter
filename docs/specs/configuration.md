@@ -3,275 +3,57 @@
 ## 共通
 
 - `--version` は `cift {version}` を標準出力へ 1 行出力し、終了コード 0 で終了する
-- `--version` 実行時は `--source` やサブコマンドを要求しない
-- `--source PATH` は必須
+- 公開コマンドは `function` / `flow` / `route`
+- `function` / `flow` / `route` の第 1 引数は必須 `symbol`
+- 入力は追加位置引数 `[inputs...]` と `--files-from` から受ける
+- `[inputs...]` は file または dir を受ける
+- `--files-from <path>` は UTF-8 text とし、1 行 1 path を読む
+- `--files-from -` は標準入力から path 一覧を読む
+- `[inputs...]` と `--files-from` は併用できる
+- 結合後の入力 path は正規化、重複除去、絶対 path 化し、絶対 path 昇順で処理する
+- dir は再帰走査し、既定では C/C++ 系拡張子だけを対象にする
 - `--language auto|c|cpp` を指定可能
-- `--language` の既定値は `auto`
-- `auto` では `.c` を C、`.cc` / `.cpp` / `.cxx` / `.c++` / `.hpp` / `.hh` / `.hxx` / `.h++` を C++ として扱う
-- `.h` と未知拡張子では、C / C++ の両方で parse quality を比較して採用言語を決める
-- `.h` で parse quality が同点なら C を優先する
 - `-D NAME[=VALUE]` は複数回指定可能
-- 出力は行番号付き text
-- ただし `flow` / `path` は、保持した元ソース行どうしが連続しない区間ごとに 1 行の省略表示を挿入できる
-- 省略表示は合成行であり元ソース行番号を持たない
-- 省略表示の可視文字列は `...` とし、インデントはその区間で最初に現れる非空の省略対象行の先頭空白を引き継ぐ
-- 省略対象が空行だけの区間では、省略表示のインデントは直後の保持行に合わせる
-- 抽出結果出力だけは `--color` / `--no-color` でシンタックスハイライト有無を制御できる
-- `--color` / `--no-color` を省略した場合、標準出力が TTY のときだけ色付きで出力する
-- 色付き出力は ANSI エスケープを含むが、可視文字列の内容と行番号契約は変えない
-- parse quality は成功時でも標準エラーへ診断を出せる
-- parse quality 診断は `degraded` のときだけ出す
-- parse quality 診断はカテゴリごとに 1 行へ集約し、続けて再現情報 1 行を出す
-- parse quality 診断は終了コードを変えない
-- 診断カテゴリは `language` / `parse` / `preprocess` / `input` の 4 種である
-- 再現情報は `source path`、解決後言語、`--language` の実効値、`-D` 一覧を含む
-- help、version、parse quality 診断、利用者向けエラーは、実行環境の既定 stdout/stderr エンコーディングが日本語を表現できない場合でも `UnicodeEncodeError` で異常終了してはならない
-- 実装は起動時に stdout/stderr を UTF-8 へ正規化してこの契約を満たしてよい
-- 入力文字コードは UTF-8 と UTF-8 with BOM を受理する
-- 非 UTF-8 入力は抽出失敗として扱う
-- 改行コードは LF と CRLF を受理し、内部では LF に正規化する
-- BOM 付き UTF-8、CRLF、混在改行は成功を許可するが `input` 診断対象である
+- `--format auto|text|json` を指定可能
+- `auto` は TTY なら `text`、非 TTY なら `json`
+- ただし `--color` / `--no-color` を明示した `auto` は `text` として扱う
+- `--color` / `--no-color` は text 出力だけに作用する
+- `--strict-inputs` を指定すると、未一致 file が 1 件でもあれば終了コード 1 にする
+- `text` は行番号付き表示、`json` は構造化結果を返す
+- 複数入力時は複数結果を返してよい
+- same-file 内の同名関数は source order で複数結果を返す
+- 既定では未一致 file は warning として記録し、1 件以上結果があれば成功する
+- `--files-from` の UTF-8 読み込み失敗は利用者向けエラーとして終了コード 1 に正規化する
+- 1 件でも DSL 不正、抽出失敗、または `--strict-inputs` 下の未一致があれば終了コード 1
 - Typer の引数エラーは終了コード 2
-- 抽出失敗、未一致、DSL 不正は終了コード 1
 
 ## `function`
 
-- 必須引数は `--name`
-- `--language` を指定可能
-- `--color` / `--no-color` を指定可能
-- 指定関数の実装全体をそのまま抽出する
-- 行番号は関数定義の開始行から終了行まで連続で出力する
+- 形式は `cift function <symbol> [inputs...]`
+- 対象関数の実装全体をそのまま返す
 
 ## `flow`
 
-- 必須引数は `--function`
-- `--language` を指定可能
-- `--color` / `--no-color` を指定可能
-- `--highlight` を指定したときだけ `--track` 一致箇所へ追加強調を適用する
-- 制御構造の骨格だけを残す
-- 保持対象は `if` / `else if` / `else` / `switch` / `case` / `default` / `for` / `while` / `do ... while` / `goto` / `break` / `continue` / `return` / ラベル定義
-- `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に走査する
+- 形式は `cift flow <symbol> [inputs...]`
 - `--track` は複数回指定可能
-- `--track` 一致文は骨格に追加して残す
-- 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
-- `--highlight` は `--track` がない場合は無効果
-- `--highlight` を指定しても `--no-color` または非 TTY では追加強調を行わない
+- `--highlight` は highlight span を追加保持する
+- 制御構造の骨格と `--track` 一致文を返す
 
-例:
+## `route`
 
-```c
-int DecideState(int x)
-{
-    int state = 0;
-    LogStart();
+- 形式は `cift route <symbol> [inputs...] --route <route>...`
+- `--route` は 1 個以上必須で、複数回指定可能
+- route DSL の正本は [route-dsl.md](route-dsl.md)
+- 指定 route に沿う枝だけを返す
 
-    if (x > 0) {
-        Prepare();
-        state = 1;
-    } else {
-        PrepareFallback();
-        state = 2;
-    }
+## JSON
 
-    Finalize();
-    return state;
-}
-```
+- トップレベルは `tool_version`、`command`、`inputs`、`results`、`diagnostics` を持つ
+- `results[*]` は `file`、`symbol`、`kind`、`span`、`language`、`rendered_lines`、`rendered_text`、`diagnostics` を持つ
+- `route` は追加で `routes` を持つ
 
-```sh
-cift flow --function DecideState --source decide_state.c --track state
-```
+## Text
 
-```text
-1: int DecideState(int x)
-2: {
-3:     int state = 0;
-        ...
-6:     if (x > 0) {
-            ...
-8:         state = 1;
-9:     } else {
-            ...
-11:         state = 2;
-12:     }
-        ...
-15:     return state;
-16: }
-```
-
-## `path`
-
-- 必須引数は `--function`
-- `--route` は 1 個以上必須で、複数回指定できる
-- `--language` を指定可能
-- `--color` / `--no-color` を指定可能
-- route DSL の正本は [path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) とする
-- 複数 route を指定した場合、各 route を独立に解決して OR で union する
-- 表示順は元ソース行順で、`--route` の指定順には依存しない
-- 共通祖先、重複ノード、同一行は 1 回だけ表示する
-- 選択した枝の内部にある通常文は残す
-- route 終端の文を含むコンテナでは、その直後に続く通常文を残す
-- 同じ階層で次の分岐文またはループ文に達した時点で、route 終端後の通常文保持は打ち切る
-- `else` / `else-if[...]` を選んだ場合も、対応する親 `if` ヘッダを残す
-- `case` / `default` 本体は直下に文が並ぶ形でも `{ ... }` ブロック 1 個で包まれる形でも同等に探索する
-- `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` も中間コンテナとして探索できる
-- route の探索対象は常に現在コンテナの直下文だけで、loop や branch を暗黙にはまたがない
-- 各 route の各段で一致候補が複数ある場合は、ソース順最初の一致を採用する
-- 1 本でも DSL 不正または未一致があれば全体を失敗とする
-- 省略された通常文や空行は、連続する区間ごとに 1 行の `...` で表示する
-
-例:
-
-```c
-int RouteTail(int x)
-{
-    switch (x) {
-    case 1:
-        Prep();
-        if (x > 0) {
-            Work();
-        }
-        After();
-        break;
-    default:
-        break;
-    }
-}
-```
-
-```sh
-cift path --function RouteTail --source route_tail.c --route 'case[1]/if[x > 0]'
-```
-
-```text
-1: int RouteTail(int x)
-2: {
-3:     switch (x) {
-4:     case 1:
-5:         Prep();
-6:         if (x > 0) {
-7:             Work();
-8:         }
-9:         After();
-10:         break;
-        ...
-13:     }
-14: }
-```
-
-```c
-int ElseRoute(int x)
-{
-    if (x > 0) {
-        WorkA();
-    } else {
-        WorkB();
-    }
-
-    After();
-    return 3;
-}
-```
-
-```sh
-cift path --function ElseRoute --source else_route.c --route 'else'
-```
-
-```text
-1: int ElseRoute(int x)
-2: {
-3:     if (x > 0) {
-            ...
-5:     } else {
-6:         WorkB();
-7:     }
-        ...
-9:     After();
-10:     return 3;
-11: }
-```
-
-```sh
-cift path --function FooFunction --source foo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
-```
-
-```text
-10:     case CMD_HOGE:
-13:         if (ret == OK) {
-15:         } else if (errno == EINT) {
-17:             state = RETRY;
-18:             return -2;
-19:         }
-```
-
-```c
-int LoopRoute(int sts)
-{
-    if (status == BAR) {
-    } else {
-        for (;;) {
-            switch (sts) {
-            case STS_IDLE:
-                Work();
-                break;
-            }
-        }
-    }
-}
-```
-
-```sh
-cift path --function LoopRoute --source loop_route.c --route 'else/for/case[STS_IDLE]'
-```
-
-```text
-1: int LoopRoute(int sts)
-2: {
-3:     if (status == BAR) {
-4:     } else {
-5:         for (;;) {
-6:             switch (sts) {
-7:             case STS_IDLE:
-8:                 Work();
-9:                 break;
-10:             }
-11:         }
-12:     }
-13: }
-```
-
-```sh
-cift path --function FooFunction --source examples/demo.c \
-  --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' \
-  --route 'case[CMD_LOOP]/for'
-```
-
-```text
-47: int FooFunction(AppContext *ctx, int command)
-48: {
-        ...
-67:     switch (command) {
-        ...
-90:     case CMD_LOOP:
-91:         for (i = 0; i < 4; i++) {
-92:             if (i == 1) {
-93:                 continue;
-94:             }
-95:             ret = PollWork(ctx, i);
-96:             if (ret == OK) {
-97:                 break;
-98:             }
-99:         }
-        ...
-101:        while (ctx->retry_count < 2) {
-102:            ctx->retry_count = ctx->retry_count + 1;
-103:            if (ctx->retry_count == 1) {
-104:                continue;
-105:            }
-106:            break;
-107:        }
-        ...
-119:    }
-        ...
-128: }
-```
+- 単一結果では従来どおり行番号付き text を返す
+- 複数結果では item ごとに `command`、`symbol`、`route`、行範囲を含む file 見出しを挿入する
+- `flow` / `route` の省略区間は `...` を使う

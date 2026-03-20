@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -13,7 +14,7 @@ from pathlib import Path
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="wheel install smoke を実行する")
     parser.add_argument("--wheel", required=True, help="install 対象 wheel の path または glob")
-    parser.add_argument("--source", required=True, help="smoke で使う source file")
+    parser.add_argument("--input", required=True, help="smoke で使う source file または dir")
     parser.add_argument("--function", required=True, help="smoke で使う関数名")
     return parser.parse_args()
 
@@ -57,6 +58,17 @@ def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_with_input(command: list[str], *, cwd: Path, input_text: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        input=input_text,
+    )
+
+
 def _read_expected_version(repo_root: Path) -> str:
     data = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
     version = data["project"]["version"]
@@ -75,7 +87,7 @@ def _assert_stdout(result: subprocess.CompletedProcess[str], expected: str) -> N
 def main() -> None:
     args = _parse_args()
     wheel = _resolve_path(args.wheel)
-    source = _resolve_path(args.source)
+    input_path = _resolve_path(args.input)
     repo_root = Path.cwd()
     expected_version = f"cift {_read_expected_version(repo_root)}"
 
@@ -94,19 +106,82 @@ def main() -> None:
             expected_version,
         )
 
-        result = _run(
+        function_result = _run(
             [
                 str(cift),
                 "function",
-                "--name",
                 args.function,
-                "--source",
-                str(source),
+                str(input_path),
+                "--format",
+                "text",
             ],
             cwd=repo_root,
         )
-        if args.function not in result.stdout:
+        if args.function not in function_result.stdout:
             raise RuntimeError("smoke 実行結果に対象関数名が含まれていません")
+
+        json_result = _run(
+            [
+                str(cift),
+                "flow",
+                args.function,
+                str(input_path),
+                "--track",
+                "ctx->state",
+                "--format",
+                "json",
+            ],
+            cwd=repo_root,
+        )
+        flow_payload = json.loads(json_result.stdout)
+        if flow_payload["command"] != "flow":
+            raise RuntimeError("flow JSON smoke の command が不正です")
+
+        stdin_result = _run_with_input(
+            [
+                str(cift),
+                "function",
+                args.function,
+                "--files-from",
+                "-",
+                "--format",
+                "json",
+            ],
+            cwd=repo_root,
+            input_text=f"{input_path}\n",
+        )
+        stdin_payload = json.loads(stdin_result.stdout)
+        if not stdin_payload["results"]:
+            raise RuntimeError("stdin --files-from smoke で結果が空です")
+
+        route_result = _run(
+            [
+                str(cift),
+                "route",
+                args.function,
+                str(input_path),
+                "--route",
+                "case[CMD_HOGE]/else-if[ret == 11]",
+                "--format",
+                "text",
+            ],
+            cwd=repo_root,
+        )
+        if "return -2;" not in route_result.stdout:
+            raise RuntimeError("route smoke 実行結果が想定と異なります")
+
+        auto_result = _run(
+            [
+                str(cift),
+                "function",
+                args.function,
+                str(input_path),
+            ],
+            cwd=repo_root,
+        )
+        auto_payload = json.loads(auto_result.stdout)
+        if auto_payload["command"] != "function":
+            raise RuntimeError("非 TTY auto smoke の JSON 出力が不正です")
 
     print(f"install smoke succeeded: {wheel.name}")
 

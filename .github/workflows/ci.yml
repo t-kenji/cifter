@@ -45,7 +45,7 @@ jobs:
         run: python tools/check_dist.py --wheel "dist/*.whl" --sdist "dist/*.tar.gz"
 
       - name: Run Linux install smoke
-        run: python tools/install_smoke.py --wheel "dist/*.whl" --source examples/demo.c --function FooFunction
+        run: python tools/install_smoke.py --wheel "dist/*.whl" --input examples/demo.c --function FooFunction
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
@@ -75,4 +75,4 @@ jobs:
           path: dist
 
       - name: Run Windows install smoke
-        run: python tools/install_smoke.py --wheel "dist/*.whl" --source examples/demo.c --function FooFunction
+        run: python tools/install_smoke.py --wheel "dist/*.whl" --input examples/demo.c --function FooFunction

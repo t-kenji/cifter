@@ -1,7 +1,7 @@
 [project]
 name = "cifter-cli"
-version = "0.3.0"
-description = "C/C++ の関数実装を抽出する軽量 CLI"
+version = "1.0.0"
+description = "C/C++ ソースを高速に切り出す CLI"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -45,7 +45,7 @@ Issues = "https://github.com/t-kenji/cifter/issues"
 Changelog = "https://github.com/t-kenji/cifter/blob/main/CHANGELOG.md"
 
 [project.scripts]
-cift = "cifter:main"
+cift = "cifter.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.10.10,<0.11.0"]

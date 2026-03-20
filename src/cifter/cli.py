@@ -8,15 +8,17 @@ from typing import Annotated
 import typer
 
 from cifter.errors import CiftError
-from cifter.extract_flow import extract_flow
-from cifter.extract_function import extract_function
-from cifter.extract_path import extract_path
-from cifter.model import ExtractionResult, LanguageMode, ParseDiagnostic, TrackPath
-from cifter.parser import ParsedSource, parse_source
-from cifter.render import _should_use_color, print_result
+from cifter.model import FormatMode, LanguageMode, ResolvedInputFile, RunResult
+from cifter.render_json import render_result_json
+from cifter.render_text import print_result_text
+from cifter.run import resolve_input_files, resolve_output_format, run_flow, run_function, run_route
 from cifter.version import format_version_output
 
-app = typer.Typer(no_args_is_help=True, help="C/C++ の関数実装を抽出する CLI")
+app = typer.Typer(
+    no_args_is_help=True,
+    add_completion=False,
+    help="C/C++ ソースを高速に切り出す CLI",
+)
 
 
 def main() -> None:
@@ -63,16 +65,11 @@ def common_options(
     _ = version
 
 
-SourceOption = Annotated[
-    Path,
+FilesFromOption = Annotated[
+    list[str] | None,
     typer.Option(
-        "--source",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="解析するソースファイル",
+        "--files-from",
+        help="1 行 1 path の一覧 file。`-` で標準入力から読む",
     ),
 ]
 
@@ -80,7 +77,7 @@ ColorOption = Annotated[
     bool | None,
     typer.Option(
         "--color/--no-color",
-        help="抽出結果のシンタックスハイライトを制御する",
+        help="text 出力のシンタックスハイライトを制御する",
     ),
 ]
 
@@ -93,128 +90,151 @@ LanguageOption = Annotated[
     ),
 ]
 
+FormatOption = Annotated[
+    FormatMode,
+    typer.Option(
+        "--format",
+        help="出力形式を指定する。auto は TTY=text、非 TTY=json。--color/--no-color を明示した auto は text",
+        case_sensitive=False,
+    ),
+]
 
-@app.command("function")
+StrictInputsOption = Annotated[
+    bool,
+    typer.Option(
+        "--strict-inputs",
+        help="未一致 file を warning ではなく失敗として扱う",
+    ),
+]
+
+
+@app.command("function", help="関数実装全体を切り出す")
 def function_command(
-    name: Annotated[str, typer.Option("--name", help="抽出する関数名")],
-    source: SourceOption,
-    language: LanguageOption = "auto",
-    color: ColorOption = None,
-    defines: Annotated[
-        list[str] | None,
-        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
-    ] = None,
-) -> None:
-    def task() -> tuple[ExtractionResult, ParsedSource]:
-        parsed = parse_source(source, defines or [], language)
-        return extract_function(parsed, name), parsed
-
-    _run(task, color=color, source=source, language=language, defines=defines or [])
-
-
-@app.command("flow")
-def flow_command(
-    function_name: Annotated[str, typer.Option("--function", help="対象関数名")],
-    source: SourceOption,
-    language: LanguageOption = "auto",
-    track: Annotated[list[str], typer.Option("--track", help="保持するアクセスパス")] | None = None,
-    highlight: Annotated[bool, typer.Option("--highlight", help="`--track` 一致箇所を追加強調する")] = False,
-    color: ColorOption = None,
-    defines: Annotated[
-        list[str] | None,
-        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
-    ] = None,
-) -> None:
-    def task() -> tuple[ExtractionResult, ParsedSource]:
-        parsed = parse_source(source, defines or [], language)
-        tracks = tuple(TrackPath.parse(value) for value in (track or []))
-        include_highlights = bool(highlight and tracks and _should_use_color(color, sys.stdout))
-        return extract_flow(
-            parsed,
-            function_name,
-            tracks,
-            include_highlights=include_highlights,
-        ), parsed
-
-    _run(task, color=color, source=source, language=language, defines=defines or [])
-
-
-@app.command("path")
-def path_command(
-    function_name: Annotated[str, typer.Option("--function", help="対象関数名")],
-    source: SourceOption,
-    route: Annotated[list[str], typer.Option("--route", help="抽出する経路 DSL (`case[...]` / `if[...]` / `else-if[...]` を `/` で連結)")],
-    language: LanguageOption = "auto",
-    color: ColorOption = None,
-    defines: Annotated[
-        list[str] | None,
-        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
-    ] = None,
-) -> None:
-    def task() -> tuple[ExtractionResult, ParsedSource]:
-        parsed = parse_source(source, defines or [], language)
-        return extract_path(parsed, function_name, route), parsed
-
-    _run(task, color=color, source=source, language=language, defines=defines or [])
-
-
-def _run(
-    task: Callable[[], tuple[ExtractionResult, ParsedSource]],
+    symbol: Annotated[str, typer.Argument(help="抽出する関数名")],
+    inputs: Annotated[list[Path] | None, typer.Argument(help="対象 file または dir。複数指定可")] = None,
     *,
-    color: bool | None,
-    source: Path,
-    language: LanguageMode,
-    defines: list[str],
+    language: LanguageOption = "auto",
+    format_mode: FormatOption = "auto",
+    color: ColorOption = None,
+    strict_inputs: StrictInputsOption = False,
+    defines: Annotated[
+        list[str] | None,
+        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
+    ] = None,
+    files_from: FilesFromOption = None,
 ) -> None:
+    run_result = _run_with_input_resolution(
+        lambda resolved_inputs: run_function(
+            symbol,
+            inputs=resolved_inputs,
+            defines=defines or [],
+            language=language,
+            strict_inputs=strict_inputs,
+        ),
+        inputs=inputs or [],
+        files_from=files_from or [],
+        format_mode=format_mode,
+        color=color,
+    )
+    raise typer.Exit(code=0 if run_result.ok else 1)
+
+
+@app.command("flow", help="制御構造の骨格と追跡行を切り出す")
+def flow_command(
+    symbol: Annotated[str, typer.Argument(help="抽出する関数名")],
+    inputs: Annotated[list[Path] | None, typer.Argument(help="対象 file または dir。複数指定可")] = None,
+    *,
+    language: LanguageOption = "auto",
+    track: Annotated[list[str] | None, typer.Option("--track", help="保持するアクセスパス")] = None,
+    highlight: Annotated[bool, typer.Option("--highlight", help="`--track` 一致箇所を追加強調する")] = False,
+    format_mode: FormatOption = "auto",
+    color: ColorOption = None,
+    strict_inputs: StrictInputsOption = False,
+    defines: Annotated[
+        list[str] | None,
+        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
+    ] = None,
+    files_from: FilesFromOption = None,
+) -> None:
+    run_result = _run_with_input_resolution(
+        lambda resolved_inputs: run_flow(
+            symbol,
+            inputs=resolved_inputs,
+            defines=defines or [],
+            language=language,
+            track=track or [],
+            include_highlights=highlight,
+            strict_inputs=strict_inputs,
+        ),
+        inputs=inputs or [],
+        files_from=files_from or [],
+        format_mode=format_mode,
+        color=color,
+    )
+    raise typer.Exit(code=0 if run_result.ok else 1)
+
+
+@app.command("route", help="指定 route DSL に沿う枝だけを切り出す")
+def route_command(
+    symbol: Annotated[str, typer.Argument(help="抽出する関数名")],
+    inputs: Annotated[list[Path] | None, typer.Argument(help="対象 file または dir。複数指定可")] = None,
+    *,
+    route: Annotated[list[str], typer.Option("--route", help="抽出する route DSL。1 個以上必須")],
+    language: LanguageOption = "auto",
+    format_mode: FormatOption = "auto",
+    color: ColorOption = None,
+    strict_inputs: StrictInputsOption = False,
+    defines: Annotated[
+        list[str] | None,
+        typer.Option("--define", "-D", help="条件分岐評価に使うマクロ定義"),
+    ] = None,
+    files_from: FilesFromOption = None,
+) -> None:
+    run_result = _run_with_input_resolution(
+        lambda resolved_inputs: run_route(
+            symbol,
+            inputs=resolved_inputs,
+            defines=defines or [],
+            language=language,
+            routes=route,
+            strict_inputs=strict_inputs,
+        ),
+        inputs=inputs or [],
+        files_from=files_from or [],
+        format_mode=format_mode,
+        color=color,
+    )
+    raise typer.Exit(code=0 if run_result.ok else 1)
+
+
+def _run_with_input_resolution(
+    task: Callable[[tuple[ResolvedInputFile, ...]], RunResult],
+    *,
+    inputs: list[Path],
+    files_from: list[str],
+    format_mode: FormatMode,
+    color: bool | None,
+) -> RunResult:
     try:
-        result, parsed = task()
-        print_result(result, parsed.language_name, color=color)
-        _print_quality_diagnostics(parsed, source=source, language=language, defines=defines)
+        resolved_inputs = resolve_input_files(inputs, files_from=files_from)
+        run_result = task(resolved_inputs)
+        _write_run_result(run_result, format_mode=format_mode, color=color)
+        return run_result
     except CiftError as error:
         typer.echo(error.message, err=True)
         raise typer.Exit(code=1) from error
 
 
-def _print_quality_diagnostics(
-    parsed: ParsedSource,
-    *,
-    source: Path,
-    language: LanguageMode,
-    defines: list[str],
-) -> None:
-    if parsed.quality.level != "degraded":
+def _write_run_result(run_result: RunResult, *, format_mode: FormatMode, color: bool | None) -> None:
+    if format_mode == "auto" and color is not None:
+        output_format: FormatMode = "text"
+    else:
+        output_format = resolve_output_format(format_mode, is_tty=getattr(sys.stdout, "isatty", lambda: False)())
+    if output_format == "json":
+        typer.echo(render_result_json(run_result))
         return
 
-    categories = ("language", "parse", "preprocess", "input")
-    for category in categories:
-        messages = _aggregate_quality_messages(parsed.quality.diagnostics, category)
-        if not messages:
-            continue
-        typer.echo(f"quality[{category}]: {'; '.join(messages)}", err=True)
-
-    defines_text = ", ".join(defines) if defines else "-"
-    typer.echo(
-        "repro: "
-        f"source={source} resolved_language={parsed.resolved_language} "
-        f"--language={language} -D={defines_text}",
-        err=True,
-    )
-
-
-def _aggregate_quality_messages(
-    diagnostics: tuple[ParseDiagnostic, ...],
-    category: str,
-) -> list[str]:
-    grouped: dict[str, list[ParseDiagnostic]] = {}
-    for diagnostic in diagnostics:
-        if diagnostic.category != category:
-            continue
-        grouped.setdefault(diagnostic.code, []).append(diagnostic)
-
-    messages: list[str] = []
-    for _code, items in grouped.items():
-        message = items[0].message
-        if len(items) > 1:
-            message = f"{message} (x{len(items)})"
-        messages.append(message)
-    return messages
+    print_result_text(run_result, color=color)
+    for diagnostic in run_result.diagnostics:
+        prefix = f"{diagnostic.file}: " if diagnostic.file is not None else ""
+        typer.echo(f"{prefix}{diagnostic.message}", err=True)

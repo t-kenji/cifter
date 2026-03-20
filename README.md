@@ -1,284 +1,190 @@
 # cifter
 
-`cifter` は、C/C++ の関数実装を機械的かつ高速に抽出する CLI です。
-`tree-sitter` で構文を捉え、行番号付き text として返します。重い意味解析や LLM 連携は行いません。
+`cifter` は、C/C++ のコードから必要な部分だけを抜き出す CLI です。
+特に、検索ツールで候補ファイルを絞ったあとに「関数を丸ごと見たい」「分岐の流れだけ見たい」「特定の分岐だけ見たい」という場面を軽くします。
 
 ## 概要
 
-- 単一の `--source` ファイルから抽出します
-- 公開サブコマンドは `function` / `flow` / `path` の 3 つです
-- 出力は元ソースと対応付け可能な行番号付き text です
-- `--language auto|c|cpp` で解析言語を制御できます
-- `-D NAME[=VALUE]` により条件分岐前処理を評価できます
-- 出力先が TTY の場合は既定でシンタックスハイライトします
+- `function`: 関数をそのまま抜き出す
+- `flow`: 分岐や繰り返しの流れを見やすく抜き出す
+- `route`: 特定の分岐だけを抜き出す
+- 入力はファイル / ディレクトリ / `--files-from` / 標準入力から受け取れます
+- 出力は text と JSON に対応している
+- 対象言語は C / C++
+
+`route` では、分岐の通り道を文字列で指定する書き方を使います。
+たとえば `else-if[value == 10]` や `case[CMD_OK]/else` のように指定できます。
+
+`--format auto` を使うと、画面に直接表示するときは text、パイプや `>` で受け渡すときは JSON を返します。
 
 ## Why cifter
 
-- 関数全体をそのまま抜き出したい
-- 分岐の骨格だけを見たい
-- 特定の route だけを細く追いたい
-- 元の行番号を失わずにレビューや調査へ貼りたい
+- `grep` だけだと、関数全体や分岐の前後関係までは見えにくい
+- IDE を開くほどではないけれど、必要なコードの文脈は確認したい
+- 大きい C/C++ リポジトリで、候補を絞ったあとに読みやすい形で抜き出したい
+- 人間向けの text と、後段処理しやすい JSON の両方を同じコマンドで取りたい
+
+`cifter` は検索ツールの代わりではなく、その後ろで使う「切り出し」に特化したツールです。
 
 ## Installation
-
-PyPI から install:
 
 ```sh
 python -m pip install cifter-cli
 ```
 
-最小確認:
+確認:
 
 ```sh
 cift --version
 cift --help
 python -m cifter --version
-python -m cifter --help
 ```
 
-GitHub Release の `wheel` / `sdist` から install することもできます。
+## README 内サンプルソース
 
-```sh
-python -m pip install ./cifter_cli-0.3.0-py3-none-any.whl
-```
-
-開発用:
-
-```sh
-uv sync
-uv run cift --help
-```
-
-## Quick Start
-
-サンプルソース `foo.c`:
+次の最小サンプルを `sample.c` として使います。
 
 ```c
-int DecideState(int x)
+int DecideMode(int value)
 {
     int state = 0;
-    LogStart();
 
-    if (x > 0) {
-        Prepare();
+    if (value > 10) {
         state = 1;
-    } else {
-        PrepareFallback();
+    } else if (value == 10) {
         state = 2;
+    } else {
+        state = 3;
     }
 
-    Finalize();
     return state;
 }
 ```
 
-まず全体を確認したいときは、関数をそのまま抜きます。
+## Quick Start
+
+関数全体を丸ごと見たいとき:
 
 ```sh
-cift function --name DecideState --source foo.c
+cift function DecideMode sample.c --format text
 ```
 
 ```text
-1: int DecideState(int x)
+1: int DecideMode(int value)
+2: {
+...
+13: }
+```
+
+関数の本体をそのまま確認したいときに使います。
+
+分岐の流れをざっと見たいとき:
+
+```sh
+cift flow DecideMode sample.c --track state --format text
+```
+
+```text
+1: int DecideMode(int value)
 2: {
 3:     int state = 0;
-4:     LogStart();
-5:
-6:     if (x > 0) {
-7:         Prepare();
-8:         state = 1;
-9:     } else {
-10:         PrepareFallback();
-11:         state = 2;
-12:     }
-13:
-14:     Finalize();
-15:     return state;
-16: }
+4:     if (value > 10) {
+...
+12:     return state;
 ```
 
-分岐の骨格と、見たい値更新だけを薄く追いたいときは `flow` を使います。
+`state` に関係する行と、`if / else if / else` の骨格を残して読みやすくします。
+
+特定の分岐だけを見たいとき:
 
 ```sh
-cift flow --function DecideState --source foo.c --track state
+cift route DecideMode sample.c --route 'else-if[value == 10]' --format text
 ```
 
 ```text
-1: int DecideState(int x)
+1: int DecideMode(int value)
 2: {
-3:     int state = 0;
-        ...
-6:     if (x > 0) {
-            ...
-8:         state = 1;
-9:     } else {
-            ...
-11:         state = 2;
-12:     }
-        ...
-15:     return state;
-16: }
+...
+6:     } else if (value == 10) {
+7:         state = 2;
+...
+12:     return state;
 ```
 
-失敗側や `else` 側の 1 本だけを追って、その後に何が起きるかまで見たいときは `path` を使います。
+`else if` の枝だけを確認したい、のような場面に向いています。
+
+検索結果をそのまま渡したいとき:
 
 ```sh
-cift path --function DecideState --source foo.c --route 'else'
+rg -l 'DecideMode' . | cift function DecideMode --files-from - --format json
 ```
 
-```text
-1: int DecideState(int x)
-2: {
-        ...
-6:     if (x > 0) {
-            ...
-9:     } else {
-10:         PrepareFallback();
-11:         state = 2;
-12:     }
-        ...
-14:     Finalize();
-15:     return state;
-16: }
-```
+`--files-from -` を使うと、標準入力から path 一覧を受け取れます。
+
+より大きい例を見たい場合は [examples/demo.c](examples/demo.c) を参照してください。
 
 ## Commands
 
-バージョン表示:
+`function`
 
-```sh
-cift --version
-python -m cifter --version
-```
+- 関数を丸ごと読みたいときに使います
+- 形式: `cift function <symbol> [inputs...]`
 
-`function`:
-指定した関数の実装全体をそのまま抽出します。レビュー対象の最小切り出しに向きます。
+`flow`
 
-```sh
-cift function --name FooFunction --source examples/demo.c
-cift function --name HeaderCpp --source include/foo.h --language cpp
-```
+- 分岐や繰り返しの流れをざっと確認したいときに使います
+- 形式: `cift flow <symbol> [inputs...] --track <path>...`
+- `--highlight` を付けると、`--track` に一致した箇所を text 出力でも強調できます
 
-`flow`:
-制御構造の骨格だけを残します。`--track` を付けると、完全一致したアクセスパスを含む文を追加保持します。
+`route`
 
-```sh
-cift flow --function FooFunction --source examples/demo.c --track state
-cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-```
+- 特定の分岐だけを見たいときに使います
+- 形式: `cift route <symbol> [inputs...] --route <route>...`
+- `--route` は「分岐の通り道を文字列で指定する書き方」です
 
-`path`:
-指定した route を細く抽出します。`--route` は複数回指定でき、複数指定時は OR で union します。親構造は残し、route 終端の文を含むコンテナでは、その直後に続く通常文だけを残します。
+共通オプション:
 
-```sh
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/if[ret == OK]'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
-cift path --function ElseRoute --source examples/demo.c --route 'else'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
-```
-
-## Preprocessor / Track / Route
-
-`--language`:
-解析言語を `auto` / `c` / `cpp` から選びます。`.h` や未知拡張子では `auto` が parse quality の高い方を選びます。
-
-```sh
-cift function --name HeaderCpp --source include/foo.h --language cpp
-```
-
-`-D`:
-条件分岐前処理の評価に使うマクロを追加します。
-
-```sh
-cift function --name FooFunction --source examples/demo.c -D DEF_FOO -D ENABLE_BAR=1
-```
-
-`--track`:
-`flow` で保持したいアクセスパスです。構文上の完全一致だけを扱います。
-
-- `state`
-- `ctx->state`
-- `a->b.c`
-
-`--route`:
-`path` で辿る最小 DSL です。
-
-- 1 個以上必須で、複数回指定できます
-- 複数指定時は各 route を独立に解決し、結果を OR で union します
-- 表示順は元ソース行順で、指定順には依存しません
-- 1 本でも DSL 不正または未一致があれば全体が失敗します
-- canonical form は `/` 区切りです
-- 詳細は `docs/specs/path-route-dsl.md` を参照します
-
-- `case[CMD_HOGE]`
-- `case[CMD_HOGE]/if[ret == OK]`
-- `case[CMD_HOGE]/else-if[errno == EINT]`
-- `default`
-- `else`
-- `for`
-- `for[i = 0; i < 4; i++]`
-- `while[ret > 0]`
-- `do-while[ret > 0]`
-
-`--route` の最小サンプル集:
-
-```sh
-cift path --source examples/demo.c --function FooFunction --route 'case[CMD_HOGE]'
-cift path --source examples/demo.c --function FooFunction --route 'case[CMD_LOOP]/while'
-cift path --source examples/demo.c --function FooFunction --route 'case[CMD_LOOP]/while/if[(ctx->retry_count == 1)]'
-cift path --source examples/demo.c --function FooFunction --route 'case[CMD_HOGE]/else-if[(ret == 11)]'
-```
+- `--files-from <path>` または `--files-from -`
+- `--language auto|c|cpp`
+- `-D NAME[=VALUE]`
+- `--format auto|text|json`
+- `--color` / `--no-color`
+- `--strict-inputs`
 
 ## Limitations
 
-- 対象は C/C++ のみです
-- 入力は単一ファイルのみです
-- 出力形式は text のみです
-- 入力文字コードは UTF-8 または UTF-8 with BOM のみ対応です
-- 改行コードは LF と CRLF のみ対応です
-- `.h` と未知拡張子は `--language auto` で parse quality の高い方を選びます
-- `--track` は名前解決やスコープ解析を行いません
-- 演算子オーバーロード名の関数探索は未対応です
-- ループ経路、`goto` 横断、意味解析、CFG 構築、JSON 出力は対象外です
+- 対象言語は C/C++ のみです
+- `cifter` 自体は検索ツールではありません。候補の絞り込みは `rg` / `fd` / `ast-grep` などと併用します
+- 意味解析や、完全な実行経路解析は行いません
+- `route` は一般的な CFG path ではなく、cifter 独自の route 指定に沿って抽出します
+- 出力は tree-sitter と前処理結果に依存するため、複雑なマクロや壊れたコードでは `degraded` 診断や抽出失敗が起こることがあります
 
-## Diagnostics
+## Migration
 
-- 解析結果の標準出力契約は変わりません
-- 解析品質が低い成功ケースでは、標準エラーへ `quality[...]` と `repro:` を出します
-- `quality[parse]`: tree-sitter の `ERROR` / `MISSING` を検出したとき
-- `quality[preprocess]`: active 領域に未対応ディレクティブが混在したとき
-- `quality[input]`: BOM 除去や CRLF 正規化を行ったとき
+| v0                                                  | v1                                         |
+| --------------------------------------------------- | ------------------------------------------ |
+| `cift function --name Foo --source a.c`             | `cift function Foo a.c`                    |
+| `cift flow --function Foo --source a.c`             | `cift flow Foo a.c`                        |
+| `cift path --function Foo --source a.c --route ...` | `cift route Foo a.c --route ...`           |
+| 単一 file 前提                                      | `file` / `dir` / `--files-from` / 標準入力 |
 
-## Examples
+補足:
 
-リポジトリには `examples/demo.c` を含めています。
-
-```sh
-cift function --name FooFunction --source examples/demo.c
-cift function --name FooFunction --source examples/demo.c --color
-cift function --name FooFunction --source examples/demo.c --no-color
-cift function --name HeaderCpp --source include/foo.h --language cpp
-cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/if[ret == OK]'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
-```
-
-## Development
-
-開発者向け文書は `docs/` にまとめています。
-
-- [docs/overview.md](/home/tkenji/Repos/cifter/docs/overview.md)
-- [docs/cli.md](/home/tkenji/Repos/cifter/docs/cli.md)
-- [docs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/path-route-dsl.md)
-- [docs/output-format.md](/home/tkenji/Repos/cifter/docs/output-format.md)
-- [docs/pipeline.md](/home/tkenji/Repos/cifter/docs/pipeline.md)
-- [docs/data-model.md](/home/tkenji/Repos/cifter/docs/data-model.md)
-- [docs/architecture.md](/home/tkenji/Repos/cifter/docs/architecture.md)
-- [docs/performance.md](/home/tkenji/Repos/cifter/docs/performance.md)
-- [docs/release.md](/home/tkenji/Repos/cifter/docs/release.md)
-
-仕様の正本は `docs/specs/` にあります。
+- 同じ file に同名関数が複数ある場合は、ソースに書かれた順で複数結果を返します
+- 未一致 file は既定で warning として飛ばします
+- 全件一致を要求する場合だけ `--strict-inputs` を付けます
 
 ## License
 
-MIT License で配布します。詳細は `LICENSE` を参照してください。
+MIT License です。詳細は [LICENSE](LICENSE) を参照してください。
+
+## Docs
+
+利用者向け:
+
+- route の書き方: [docs/route-dsl.md](docs/route-dsl.md)
+- CLI の詳しい仕様: [docs/cli.md](docs/cli.md)
+
+開発者向け:
+
+- 文書の入口: [docs/overview.md](docs/overview.md)

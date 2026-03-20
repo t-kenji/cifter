@@ -122,6 +122,17 @@ ELSE_SOURCE = """int ElseRoute(int x)
 }
 """
 
+DUPLICATE_FUNCTION_SOURCE = """int Repeat(void)
+{
+    return 1;
+}
+
+int Repeat(void)
+{
+    return 2;
+}
+"""
+
 DEFAULT_SOURCE = """int DefaultRoute(int x)
 {
     switch (x) {

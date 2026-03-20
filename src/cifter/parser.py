@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_right
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,14 @@ from cifter.preprocessor import preprocess_source
 
 CPP_EXTENSIONS = {".cc", ".cpp", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".h++"}
 QUALITY_COMPARE_EXTENSIONS = {".h"}
+_LANGUAGE_CACHE = {
+    "c": Language(tree_sitter_c.language()),
+    "cpp": Language(tree_sitter_cpp.language()),
+}
+_PARSER_CACHE = {
+    "c": Parser(_LANGUAGE_CACHE["c"]),
+    "cpp": Parser(_LANGUAGE_CACHE["cpp"]),
+}
 
 
 @dataclass(frozen=True)
@@ -149,8 +158,14 @@ def parse_source(path: Path, defines: list[str], language: LanguageMode = "auto"
     )
 
 
+def find_functions(parsed: ParsedSource, name: str) -> tuple[Node, ...]:
+    return tuple(
+        node for node in _iter_nodes(parsed.tree.root_node) if _is_function_named(node, parsed.source, name)
+    )
+
+
 def find_function(parsed: ParsedSource, name: str) -> Node:
-    matches = [node for node in _iter_nodes(parsed.tree.root_node) if _is_function_named(node, parsed.source, name)]
+    matches = list(find_functions(parsed, name))
     if not matches:
         raise CiftError(f"関数が見つかりません: {name}")
     if len(matches) > 1:
@@ -293,19 +308,15 @@ def _parse_diagnostics(metrics: _ParseMetrics) -> tuple[ParseDiagnostic, ...]:
 
 
 def _build_parser(language_name: str) -> Parser:
-    if language_name == "cpp":
-        return Parser(Language(tree_sitter_cpp.language()))
-    return Parser(Language(tree_sitter_c.language()))
+    return _PARSER_CACHE[language_name]
 
 
-def _iter_nodes(root: Node) -> list[Node]:
-    nodes: list[Node] = []
+def _iter_nodes(root: Node) -> Iterator[Node]:
     stack = [root]
     while stack:
         node = stack.pop()
-        nodes.append(node)
+        yield node
         stack.extend(reversed(node.named_children))
-    return nodes
 
 
 def _is_function_named(node: Node, source: SourceFile, name: str) -> bool:

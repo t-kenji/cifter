@@ -4,14 +4,14 @@
 
 ## 事前条件
 
-- 正本は [docs/specs/release.md](/home/tkenji/Repos/cifter/docs/specs/release.md)
+- 正本は [specs/release.md](specs/release.md)
 - release 対象の変更が `CHANGELOG.md` の `Unreleased` に整理されている
 - Linux の必須 CI が通る状態である
 - PyPI 側に GitHub Trusted Publisher が設定済みである
 
 ## release PR
 
-1. `pyproject.toml` の version を次の `0.minor.patch` へ更新する
+1. `pyproject.toml` の version を次の semver へ更新する
 2. `CHANGELOG.md` の `Unreleased` から対象項目を `## [X.Y.Z] - YYYY-MM-DD` 節へ移す
 3. release に伴って README、`docs/specs/`、`docs/` の更新が必要なら同じ PR に含める
 4. PR で Linux の必須 CI が通ることを確認する

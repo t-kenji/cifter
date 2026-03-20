@@ -1,88 +1,144 @@
 # データモデル
 
-この文書は主要な内部モデルを開発者向けに整理したものです。
+`cifter` のデータモデルは、CLI、run、抽出器、renderer の間をつなぐ共有言語です。
+ここで重要なのは、型の一覧そのものよりも「どの型がどの層をまたぐか」です。
 
-## SourceSpan
+## 全体像
 
-`SourceSpan(file, start_line, end_line)` は抽出結果の共通トレーサビリティ単位です。
+代表的な型は次の 3 段に分かれます。
 
-- `file`: 元ファイル path
-- `start_line`: 抽出範囲の開始行
-- `end_line`: 抽出範囲の終了行
+- run 全体を表す型
+- 1 抽出結果を表す型
+- parse / route / line 単位の補助型
 
-## ParseDiagnostic
+## run 全体を表す型
 
-`ParseDiagnostic(category, code, message, details)` は parse quality の元診断です。
+### `RunResult`
 
-- `category`: `language` / `parse` / `preprocess` / `input`
-- `code`: 集約用の識別子
-- `message`: 利用者向け要約
-- `details`: 補助情報
+`RunResult` は 1 回の実行全体の結果です。
 
-## ParseQualityReport
+持つ情報:
 
-`ParseQualityReport(level, diagnostics)` は解析品質の集約結果です。
+- 実行した command
+- 対象 input 集合
+- 抽出できた result 集合
+- run 全体の diagnostics
+- tool version
 
-- `level`: `clean` または `degraded`
-- `diagnostics`: 集約前の診断列
+役割:
 
-## ExtractedLine
+- CLI が最終終了コードを決めるための材料
+- renderer が text/json を生成するための入力
+- run 成功か warning 付き成功か失敗かを表す単位
 
-`ExtractedLine(line_no, text, highlights, omitted_after_indent)` は 1 行分の表示単位です。
+### `RunDiagnostic`
 
-- `line_no`: 1-based 行番号
-- `text`: その行の表示内容
-- `highlights`: 色付き出力時にだけ使う行内強調範囲
-- `omitted_after_indent`: 直後に `...` を差し込むときのコード側インデント
+`RunDiagnostic` は run レベルの warning / error を表します。
 
-## InlineHighlightSpan
+典型例:
 
-`InlineHighlightSpan(start_column, end_column, kind)` は 1 行内の追加強調範囲です。
+- 関数未一致
+- DSL 不正
+- parse 失敗
+- `no_results`
 
-- `start_column` / `end_column`: source line 基準の 0-based 半開区間
-- `kind`: 現時点では `track_match` のみ
+file を持つ場合と持たない場合があります。
+つまり「特定 file にひもづく問題」と「run 全体の問題」の両方を表せます。
 
-## ExtractionResult
+## 1 抽出結果を表す型
 
-`ExtractionResult(span, lines)` は公開コマンドが返す共通結果です。
+### `ExtractionItem`
 
-- `span`: 結果全体の最小範囲
-- `lines`: 表示対象の行集合
+`ExtractionItem` は 1 match 分の抽出結果です。
 
-## TrackPath
+持つ情報:
 
-`TrackPath` は `flow --track` 用の完全一致パターンです。
+- file
+- symbol
+- kind
+- span
+- language
+- lines
+- diagnostics
+- routes
 
-- 文法は `segment (("." | "->") segment)*`
-- `segment` は識別子です
-- `raw` は利用者入力、`normalized` は空白除去済み表現です
+役割:
 
-## RouteSegment
+- text/json 共通の中間表現
+- 抽出器の結果を renderer へ渡す橋渡し
+- file ごとの抽出結果と、その file に固有の診断情報を保持する
 
-`RouteSegment` は `path --route` を 1 要素ずつ分解した内部表現です。
+重要なのは、renderer が source を再解析しないことです。
+表示に必要な情報は `ExtractionItem` に集約されます。
 
-- kind は `case` / `default` / `if` / `else` / `else_if` / `for` / `while` / `do_while`
-- `raw` は利用者入力の 1 segment です
-- `payload` は `[]` 内の生文字列です。payload なしなら `None` です
-- `normalized_payload` は kind ごとの比較用正規化結果です
-- 外部 DSL の canonical form は [docs/specs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) を参照します
+### `SourceSpan`
 
-## SourceFile
+`SourceSpan` は元ソース上の範囲を表します。
 
-`SourceFile` は前処理後ソースの参照情報を保持します。
+`start_line` と `end_line` を持ち、抽出結果が元ソースのどこに対応するかを示します。
+これはトレーサビリティの中心です。
 
-- `text`: 前処理後の全文
-- `lines`: 行配列
-- `trailing_newline`: 末尾改行の有無
-- `line_start_bytes`: 各行の開始 byte offset
+### `ExtractedLine`
 
-byte offset を保持することで、複合行の一部だけを残す `path` のレンダリングを支えます。
+`ExtractedLine` は 1 行の表示単位です。
 
-## ParsedSource
+持つ情報:
 
-`ParsedSource(source, tree, language_name, resolved_language, language_resolution, quality)` は前処理後ソースと parse tree を束ねる最上位入力です。
+- line number
+- text
+- inline highlight
+- omission marker
 
-- `language_name`: renderer 用のシンタックス名
-- `resolved_language`: 実際に採用した解析言語
-- `language_resolution`: `explicit` / `extension` / `quality`
-- `quality`: parse quality 集約結果
+抽出器は最終的にこの単位へ落とし込みます。
+text/json の違いはあっても、共通の土台は `ExtractedLine` です。
+
+## parse と品質に関わる型
+
+### `ParseDiagnostic`
+
+前処理や parse の過程で生じた品質情報です。
+
+例:
+
+- BOM 正規化
+- 改行正規化
+- parse error node 検出
+- missing node 検出
+
+抽出が成功しても、品質情報として結果へ残る場合があります。
+
+### `ParseQualityReport`
+
+parse 結果の品質をまとめる型です。
+`clean` / `degraded` のような水準を持ち、`ParseDiagnostic` 群を束ねます。
+
+## route と track に関わる型
+
+### `TrackPath`
+
+`flow --track` 用の内部表現です。
+
+利用者入力の文字列をそのまま持つだけではなく、比較しやすい正規化済み表現も持ちます。
+これにより、抽出器は track 一致判定だけに集中できます。
+
+### `RouteSegment`
+
+route DSL を segment 単位に分解した内部表現です。
+
+例:
+
+- `else`
+- `else-if[value == 10]`
+- `case[CMD_OK]`
+
+1 本の route 文字列は `RouteSegment` の列として扱われます。
+`route` 抽出器はこの列を順に消費しながら枝をたどります。
+
+## 層をまたぐ関係
+
+- CLI は `RunResult` を受けて終了コードと出力形式を決める
+- run 層は `ParsedSource` から `ExtractionItem` と `RunDiagnostic` を組み立てる
+- 抽出器は `ExtractedLine` と `SourceSpan` を返す
+- renderer は `RunResult` / `ExtractionItem` / `ExtractedLine` を読む
+
+この構造により、実装は「何を抽出したか」と「どう見せるか」を分離できます。

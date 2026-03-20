@@ -36,7 +36,21 @@ def extract_flow(
     *,
     include_highlights: bool = False,
 ) -> ExtractionResult:
-    function_node = find_function(parsed, function_name)
+    return extract_flow_node(
+        parsed,
+        find_function(parsed, function_name),
+        tracks,
+        include_highlights=include_highlights,
+    )
+
+
+def extract_flow_node(
+    parsed: ParsedSource,
+    function_node: Node,
+    tracks: tuple[TrackPath, ...],
+    *,
+    include_highlights: bool = False,
+) -> ExtractionResult:
     body = function_body(function_node)
     keep: set[int] = set()
     highlights: dict[int, set[InlineHighlightSpan]] = {}

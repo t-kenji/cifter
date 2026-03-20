@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-20
+
+- 公開 CLI を `cift function|flow|route <symbol> [inputs...]` に再設計
+- `path` を `route` へ改名し、`--source` / `--name` / `--function` を廃止
+- file / dir / `--files-from` / stdin による複数入力へ対応
+- 出力に `--format auto|text|json` を追加し、JSON を正本化
+- package import から CLI import を切り離し、配布 entry point を `cifter.cli:main` へ変更
+- `flow` / `route` / `function` を共通 run 基盤へ載せ替え、同一 run 内 parse 再利用を追加
+
 ## [0.3.0] - 2026-03-18
 
 - `path --route` で複数 route を指定できるようにし、route DSL を `/` 記法へ更新
@@ -12,21 +21,3 @@
 - タブ区切り前処理ディレクティブ、複数行ディレクティブ、`case` / `default` をブロックで包んだ `switch` などの解析回帰を改善
 - `flow` で `--track` 一致箇所の追加強調を可能にし、`flow` / `path` では省略区間を `...` で表示するようにした
 - `path` の route で `for` / `while` / `do while` を中間段としてたどれるようにした
-
-## [0.2.1] - 2026-03-16
-
-- README の Quick Start を更新し、`function` / `flow` / `path` の使い分けと出力差が直感的に分かるようにした
-
-## [0.2.0] - 2026-03-16
-
-- 抽出結果へシンタックスハイライトを追加し、`--color` / `--no-color` で制御できるようにした
-- `cift --version` と `python -m cifter --version` を追加
-
-## [0.1.0] - 2026-03-16
-
-- 配布名を `cifter-cli` へ変更し、PyPI 公開向けの project metadata を追加
-- README を利用者向けに再構成し、Quick Start と install 導線を追加
-- 開発者向け `docs/` に CLI、出力、パイプライン、データモデル、アーキテクチャ、release 運用の文書を追加
-- `function` / `flow` / `path` の 3 サブコマンドを追加
-- `-D NAME[=VALUE]` による条件分岐評価を追加
-- 行番号付き text 出力と `python -m cifter` 実行を追加

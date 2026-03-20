@@ -50,22 +50,30 @@ class _RenderedLine:
     priority: _RenderPriority
 
 
-def extract_path(parsed: ParsedSource, function_name: str, routes: Sequence[str]) -> ExtractionResult:
+def extract_route(parsed: ParsedSource, function_name: str, routes: Sequence[str]) -> ExtractionResult:
     route_values = tuple(routes)
     if not route_values:
         raise CiftError("空の --route は指定できません")
     function_node = find_function(parsed, function_name)
+    parsed_routes = tuple(parse_route(route) for route in route_values)
+    return extract_route_node(parsed, function_node, parsed_routes)
+
+
+def extract_route_node(
+    parsed: ParsedSource,
+    function_node: Node,
+    routes: Sequence[tuple[RouteSegment, ...]],
+) -> ExtractionResult:
+    route_values = tuple(routes)
+    if not route_values:
+        raise CiftError("空の --route は指定できません")
     body = function_body(function_node)
     rendered: dict[int, _RenderedLine] = {}
     _keep_original_range(rendered, parsed, function_node.start_point.row + 1, body.start_point.row + 1)
     _record_original_line(rendered, parsed, body.end_point.row + 1)
-    for route in route_values:
+    for segments in route_values:
         route_rendered: dict[int, _RenderedLine] = {}
-        try:
-            segments = parse_route(route)
-            _collect_path_from_container(parsed, body, segments, route_rendered)
-        except CiftError as error:
-            raise CiftError(f"--route {route!r}: {error.message}") from error
+        _collect_path_from_container(parsed, body, segments, route_rendered)
         _merge_rendered(rendered, route_rendered)
     line_numbers = sorted(rendered)
     lines = tuple(ExtractedLine(line_no=line_no, text=rendered[line_no].text) for line_no in line_numbers)

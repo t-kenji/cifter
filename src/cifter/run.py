@@ -1,0 +1,274 @@
+from __future__ import annotations
+
+import os
+import sys
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+
+from cifter.errors import CiftError
+from cifter.extract_flow import extract_flow_node
+from cifter.extract_function import extract_function_node
+from cifter.extract_route import extract_route_node
+from cifter.model import (
+    SUPPORTED_SOURCE_EXTENSIONS,
+    CommandName,
+    ExtractionItem,
+    FormatMode,
+    InputSpec,
+    LanguageMode,
+    ResolvedInputFile,
+    RouteSegment,
+    RunDiagnostic,
+    RunResult,
+    TrackPath,
+    parse_route,
+)
+from cifter.parser import ParsedSource, find_functions, parse_source
+from cifter.version import get_version
+
+
+def resolve_output_format(format_mode: FormatMode, *, is_tty: bool) -> FormatMode:
+    if format_mode == "auto":
+        return "text" if is_tty else "json"
+    return format_mode
+
+
+def resolve_input_files(
+    inputs: Sequence[Path],
+    *,
+    files_from: Sequence[str],
+    stdin: object | None = None,
+) -> tuple[ResolvedInputFile, ...]:
+    stdin_stream = stdin or sys.stdin
+    specs: list[InputSpec] = [InputSpec(path=path, origin="argv") for path in inputs]
+    for item in files_from:
+        specs.extend(_read_input_specs(item, stdin_stream))
+    if not specs:
+        raise CiftError("対象入力がありません。file/dir または --files-from を指定してください")
+
+    resolved: dict[Path, ResolvedInputFile] = {}
+    for spec in specs:
+        for path in _expand_input_path(spec.path):
+            resolved.setdefault(path, ResolvedInputFile(path=path))
+    if not resolved:
+        raise CiftError("対象入力がありません。C/C++ ソースが見つかりませんでした")
+    return tuple(sorted(resolved.values(), key=lambda item: str(item.path)))
+
+
+def run_function(
+    symbol: str,
+    *,
+    inputs: Sequence[ResolvedInputFile],
+    defines: list[str],
+    language: LanguageMode,
+    strict_inputs: bool = False,
+) -> RunResult:
+    return _run_command(
+        "function",
+        symbol,
+        inputs=inputs,
+        defines=defines,
+        language=language,
+        strict_inputs=strict_inputs,
+    )
+
+
+def run_flow(
+    symbol: str,
+    *,
+    inputs: Sequence[ResolvedInputFile],
+    defines: list[str],
+    language: LanguageMode,
+    track: Sequence[str],
+    include_highlights: bool,
+    strict_inputs: bool = False,
+) -> RunResult:
+    tracks = tuple(TrackPath.parse(value) for value in track)
+    return _run_command(
+        "flow",
+        symbol,
+        inputs=inputs,
+        defines=defines,
+        language=language,
+        tracks=tracks,
+        include_highlights=include_highlights,
+        strict_inputs=strict_inputs,
+    )
+
+
+def run_route(
+    symbol: str,
+    *,
+    inputs: Sequence[ResolvedInputFile],
+    defines: list[str],
+    language: LanguageMode,
+    routes: Sequence[str],
+    strict_inputs: bool = False,
+) -> RunResult:
+    route_values = tuple(routes)
+    if not route_values:
+        raise CiftError("空の --route は指定できません")
+    parsed_routes = tuple(parse_route(route) for route in route_values)
+    return _run_command(
+        "route",
+        symbol,
+        inputs=inputs,
+        defines=defines,
+        language=language,
+        routes=route_values,
+        parsed_routes=parsed_routes,
+        strict_inputs=strict_inputs,
+    )
+
+
+def _run_command(
+    command: CommandName,
+    symbol: str,
+    *,
+    inputs: Sequence[ResolvedInputFile],
+    defines: list[str],
+    language: LanguageMode,
+    tracks: tuple[TrackPath, ...] = (),
+    routes: tuple[str, ...] = (),
+    parsed_routes: tuple[tuple[RouteSegment, ...], ...] = (),
+    include_highlights: bool = False,
+    strict_inputs: bool = False,
+) -> RunResult:
+    cache: dict[tuple[Path, tuple[str, ...], str], ParsedSource] = {}
+    results: list[ExtractionItem] = []
+    diagnostics: list[RunDiagnostic] = []
+    define_values = tuple(defines)
+
+    for input_file in inputs:
+        try:
+            parsed = _get_parsed_source(cache, input_file.path, define_values, language)
+            matches = find_functions(parsed, symbol)
+            if not matches:
+                diagnostics.append(
+                    RunDiagnostic(
+                        severity="error" if strict_inputs else "warning",
+                        code="function_not_found",
+                        message=f"関数が見つかりません: {symbol}",
+                        file=input_file.path,
+                    )
+                )
+                continue
+
+            for function_node in matches:
+                if command == "function":
+                    extraction = extract_function_node(parsed, function_node)
+                elif command == "flow":
+                    extraction = extract_flow_node(
+                        parsed,
+                        function_node,
+                        tracks,
+                        include_highlights=include_highlights,
+                    )
+                else:
+                    extraction = extract_route_node(parsed, function_node, parsed_routes)
+                results.append(
+                    ExtractionItem(
+                        command=command,
+                        file=input_file.path,
+                        symbol=symbol,
+                        kind=command,
+                        span=extraction.span,
+                        language=parsed.language_name,
+                        lines=extraction.lines,
+                        diagnostics=parsed.quality.diagnostics,
+                        routes=routes,
+                    )
+                )
+        except CiftError as error:
+            diagnostics.append(
+                RunDiagnostic(
+                    severity="error",
+                    code=f"{command}_failed",
+                    message=error.message,
+                    file=input_file.path,
+                )
+            )
+
+    if not results and not any(diagnostic.severity == "error" for diagnostic in diagnostics):
+        diagnostics.append(
+            RunDiagnostic(
+                severity="error",
+                code="no_results",
+                message="一致する結果がありません",
+            )
+        )
+
+    return RunResult(
+        tool_version=get_version(),
+        command=command,
+        inputs=tuple(inputs),
+        results=tuple(results),
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _get_parsed_source(
+    cache: dict[tuple[Path, tuple[str, ...], str], ParsedSource],
+    path: Path,
+    defines: tuple[str, ...],
+    language: LanguageMode,
+) -> ParsedSource:
+    key = (path, defines, language)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    parsed = parse_source(path, list(defines), language)
+    cache[key] = parsed
+    return parsed
+
+
+def _read_input_specs(path_value: str, stdin_stream: object) -> tuple[InputSpec, ...]:
+    if path_value == "-":
+        text = getattr(stdin_stream, "read", None)
+        if not callable(text):
+            raise CiftError("標準入力から path 一覧を読めません")
+        raw = text()
+        if not isinstance(raw, str):
+            raise CiftError("標準入力から UTF-8 text として path 一覧を読めません")
+        return tuple(
+            InputSpec(path=Path(line.strip()), origin="files_from")
+            for line in raw.splitlines()
+            if line.strip()
+        )
+
+    source_path = Path(path_value).expanduser()
+    try:
+        raw = source_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise CiftError(f"--files-from は UTF-8 text である必要があります: {path_value}") from error
+    except OSError as error:
+        raise CiftError(f"--files-from を読めません: {path_value}") from error
+    return tuple(
+        InputSpec(path=Path(line.strip()), origin="files_from")
+        for line in raw.splitlines()
+        if line.strip()
+    )
+
+
+def _expand_input_path(path: Path) -> Iterable[Path]:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise CiftError(f"対象が見つかりません: {path}")
+    if resolved.is_file():
+        if resolved.suffix.lower() in SUPPORTED_SOURCE_EXTENSIONS:
+            yield resolved
+        return
+    if not resolved.is_dir():
+        return
+    yield from _iter_directory_sources(resolved)
+
+
+def _iter_directory_sources(root: Path) -> Iterable[Path]:
+    for current_root, dir_names, file_names in os.walk(root):
+        dir_names.sort()
+        file_names.sort()
+        current_path = Path(current_root)
+        for name in file_names:
+            child = current_path / name
+            if child.suffix.lower() in SUPPORTED_SOURCE_EXTENSIONS:
+                yield child.resolve()

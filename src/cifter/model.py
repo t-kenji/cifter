@@ -8,12 +8,28 @@ from typing import Literal
 from cifter.errors import CiftError
 
 TRACK_PATH_PATTERN = re.compile(r"^[A-Za-z_]\w*(?:(?:->|\.)[A-Za-z_]\w*)*$")
+SUPPORTED_SOURCE_EXTENSIONS = {
+    ".c",
+    ".h",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".c++",
+    ".hpp",
+    ".hh",
+    ".hxx",
+    ".h++",
+}
 ParseDiagnosticCategory = Literal["language", "parse", "preprocess", "input"]
 ParseQualityLevel = Literal["clean", "degraded"]
 LanguageMode = Literal["auto", "c", "cpp"]
 LanguageResolution = Literal["explicit", "extension", "quality"]
 InlineHighlightKind = Literal["track_match"]
 RouteSegmentKind = Literal["case", "default", "else_if", "else", "for", "while", "do_while", "if"]
+FormatMode = Literal["auto", "text", "json"]
+CommandName = Literal["function", "flow", "route"]
+InputOrigin = Literal["argv", "files_from"]
+DiagnosticSeverity = Literal["error", "warning"]
 
 
 @dataclass(frozen=True)
@@ -62,6 +78,51 @@ class ExtractedLine:
 class ExtractionResult:
     span: SourceSpan
     lines: tuple[ExtractedLine, ...]
+
+
+@dataclass(frozen=True)
+class InputSpec:
+    path: Path
+    origin: InputOrigin
+
+
+@dataclass(frozen=True)
+class ResolvedInputFile:
+    path: Path
+
+
+@dataclass(frozen=True)
+class RunDiagnostic:
+    severity: DiagnosticSeverity
+    code: str
+    message: str
+    file: Path | None = None
+
+
+@dataclass(frozen=True)
+class ExtractionItem:
+    command: CommandName
+    file: Path
+    symbol: str
+    kind: str
+    span: SourceSpan
+    language: str
+    lines: tuple[ExtractedLine, ...]
+    diagnostics: tuple[ParseDiagnostic, ...] = ()
+    routes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RunResult:
+    tool_version: str
+    command: CommandName
+    inputs: tuple[ResolvedInputFile, ...]
+    results: tuple[ExtractionItem, ...]
+    diagnostics: tuple[RunDiagnostic, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return not any(diagnostic.severity == "error" for diagnostic in self.diagnostics)
 
 
 @dataclass(frozen=True)

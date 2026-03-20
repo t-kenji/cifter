@@ -1,77 +1,80 @@
 # CLI
 
-この文書は公開 CLI の開発者向け整理です。利用者向け導線は `README.md`、正本仕様は `docs/specs/configuration.md` を参照します。
+この文書は、公開 CLI の契約を列挙するというより、「どのコマンドをどう使い分けるか」を説明します。
+厳密な正本は [specs/configuration.md](specs/configuration.md) を参照してください。
 
-## 共通
+## コマンドの選び分け
 
-- エントリポイントは `cift`
-- モジュール実行は `python -m cifter`
-- `--version` は `cift {version}` を表示して終了します
-- `--source PATH` は必須です
-- `--language auto|c|cpp` を各抽出サブコマンドで指定できます
-- `-D NAME[=VALUE]` は複数回指定できます
-- 出力は行番号付き text です
-- `--color` / `--no-color` は各抽出サブコマンドで指定できます
-- 色指定を省略した場合は、標準出力が TTY のときだけ色付きになります
-- `.h` と未知拡張子では `auto` が parse quality の高い言語を選びます
-- parse quality が `degraded` のときだけ標準エラーへ診断を出します
-- active な `#pragma` / `#error` は保持したまま解析し、これだけでは `preprocess` 診断を出しません
+### `function`
 
-## サブコマンド
+関数全体を読みたいときに使います。
 
-`function`:
+- 使いどころ: 実装全体をそのまま確認したい
+- 向いている場面: まず関数の全体像を把握したいとき
+- 形式: `cift function <symbol> [inputs...]`
 
-- 必須引数は `--name`
-- `--language` で解析言語を固定できます
-- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
-- 指定関数の実装全体をそのまま抽出します
+### `flow`
 
-`flow`:
+制御構造の骨格を読みたいときに使います。
 
-- 必須引数は `--function`
-- `--language` で解析言語を固定できます
-- 制御構造の骨格だけを残します
-- `--track` は複数回指定できます
-- `--highlight` を付けたときだけ `--track` 一致箇所を追加強調します
-- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
-- `--track` 一致文は骨格に追加して残します
-- 省略された区間は `...` の合成行で表示します
+- 使いどころ: `if`、`switch`、loop の流れをざっと見たい
+- 向いている場面: 関数全体は長いが、分岐の構造だけを早く追いたいとき
+- 形式: `cift flow <symbol> [inputs...] --track <path>...`
 
-`path`:
+`--track` を使うと、特定の変数やアクセスパスに関係する文を骨格に追加できます。
 
-- 必須引数は `--function`
-- `--route` は 1 個以上必須で、複数回指定できます
-- `--language` で解析言語を固定できます
-- `--color` / `--no-color` で出力のシンタックスハイライトを制御できます
-- route は `/` 区切りの canonical DSL です
-- segment は `case[...]` / `default` / `if[...]` / `else` / `else-if[...]` / `for` / `for[...]` / `while` / `while[...]` / `do-while` / `do-while[...]` を扱います
-- 詳細は [docs/specs/path-route-dsl.md](/home/tkenji/Repos/cifter/docs/specs/path-route-dsl.md) を参照します
-- 複数指定時は各 route を独立に解決し、結果を OR で union します
-- 表示順は元ソース行順で、指定順には依存しません
-- route 終端後は、その直後に続く通常文だけを残し、同じ階層で次の分岐文またはループ文に達した時点で打ち切ります
-- 省略された区間は `...` の合成行で表示します
+### `route`
 
-## 終了コード
+特定の分岐だけを見たいときに使います。
 
-- Typer の引数エラーは終了コード `2`
-- 抽出失敗、未一致、DSL 不正は終了コード `1`
-- 正常終了は終了コード `0`
+- 使いどころ: ある `if` の枝、ある `case` の枝だけを確認したい
+- 向いている場面: 条件分岐の一部だけを focused に読みたいとき
+- 形式: `cift route <symbol> [inputs...] --route <route>...`
 
-## エラーモデル
+`route` は「分岐の通り道」を文字列で指定するコマンドです。
+詳細は [route-dsl.md](route-dsl.md) を参照してください。
 
-- 利用者向けの失敗は `CiftError` に集約します
-- CLI は `CiftError.message` を標準エラーへ出し、終了コード `1` で終了します
-- route 不正、関数未検出、未一致、前処理ディレクティブ不整合が主な失敗要因です
-- 成功時でも parse quality が `degraded` なら `quality[...]` と `repro:` を標準エラーへ出します
-- `preprocess` 診断は、active 領域に本当に未対応な directive が残った場合だけ出します
+## 共通オプションの整理
 
-## 代表例
+### 入力関連
 
-```sh
-cift --version
-cift function --name FooFunction --source examples/demo.c
-cift function --name HeaderCpp --source include/foo.h --language cpp
-cift flow --function FooFunction --source examples/demo.c --track 'ctx->state'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_HOGE]/else-if[errno == EINT]'
-cift path --function FooFunction --source examples/demo.c --route 'case[CMD_LOOP]/while[(ctx->retry_count < 2)]/if[(ctx->retry_count == 1)]' --route 'case[CMD_LOOP]/for'
-```
+- `[inputs...]`: file または dir
+- `--files-from <path>`: path 一覧 file
+- `--files-from -`: 標準入力から path 一覧を読む
+
+`cifter` 自体は検索ツールではないため、候補 file の絞り込みは外部ツールへ委譲する前提です。
+
+### 出力関連
+
+- `--format auto|text|json`
+- `--color` / `--no-color`
+
+`auto` は、画面へ直接出すときは text、パイプやリダイレクトで受け渡すときは json を返します。
+
+### 厳格性関連
+
+- `--strict-inputs`
+
+既定では未一致 file は warning として飛ばします。
+全件一致を要求したい場合だけ `--strict-inputs` を使います。
+
+### 前処理関連
+
+- `--language auto|c|cpp`
+- `-D NAME[=VALUE]`
+
+`-D` は条件分岐前処理に渡すマクロ定義です。
+
+## 運用意図
+
+- file 候補の絞り込みは外部ツールへ委譲する
+- `cifter` は抽出と JSON/text 出力に責務を絞る
+- `function` / `flow` / `route` の違いは見た目ではなく抽出戦略の違いである
+
+## 使い始めの順番
+
+迷ったときは次の順で使うのが分かりやすいです。
+
+1. `function` で関数全体を見る
+2. `flow` で骨格だけを見る
+3. 必要なら `route` で特定の枝だけを抜く

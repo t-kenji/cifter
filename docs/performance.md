@@ -1,45 +1,67 @@
-# 性能計測
+# 性能
 
-フェーズ3では、性能回帰を CI gate にはせず、再実行可能な計測手順と現状記録を残します。
+`cifter` は、リポジトリ全体を賢く探索することよりも、「候補 file 集合に対して素早く切り出すこと」を重視します。
 
-## 計測コマンド
+## 何を重視しているか
+
+- 全体探索より、絞り込み後の file 集合への処理速度
+- 同一 run 内での parse 再利用
+- dir 入力や `--files-from` での多件処理
+- 抽出と render の責務分離による無駄な再計算の抑制
+
+つまり、`rg` や `fd` で候補を絞ったあとに `cifter` を流す使い方を最適化対象にしています。
+
+## 性能の非目標
+
+- オールインワン検索エンジンとしての最適化
+- 意味解析ベースの重い解析
+- CFG 全探索やデータフロー解析のような高コスト機能
+
+これらは意図的に対象外です。
+
+## 開発者が見るべき観点
+
+### parser 再利用
+
+- 同一 run 内で同じ file を不要に再 parse していないか
+- language / defines の違いだけで再利用条件が崩れていないか
+
+### 入力列挙コスト
+
+- dir 走査が不要に全件保持になっていないか
+- `--files-from` と argv の統合で無駄な重複が増えていないか
+
+### 抽出器コスト
+
+- `function` / `flow` / `route` の各抽出器が不要な全探索をしていないか
+- route の segment 解釈を file ごとに繰り返していないか
+
+### render コスト
+
+- text と json のために同じ情報を二重計算していないか
+- `ExtractedLine` からの変換が余計な再構築を増やしていないか
+
+## benchmark
+
+計測コマンド:
 
 ```sh
 uv run python tools/benchmark_phase3.py
 ```
 
-必要なら関数数や反復回数を上書きできます。
+## 計測対象
 
-```sh
-uv run python tools/benchmark_phase3.py --functions 600 --iterations 5
-```
+- `parse_source(c)` / `parse_source(cpp)`
+- `function(c)` / `flow(c)` / `route(c)`
+- `function(cpp)` / `flow(cpp)` / `route(cpp)`
+- `dir` 入力
+- `--files-from` 多件処理
+- 未一致 file 混在
+- parser 再利用の有無
 
-## 計測内容
+## 性能変更時の確認ポイント
 
-- `parse_source(c)`
-- `parse_source(cpp)`
-- `function(c)` / `flow(c)` / `path(c)`
-- `function(cpp)` / `flow(cpp)` / `path(cpp)`
-
-入力はスクリプトが一時ディレクトリへ生成します。大きめの C / C++ ソースを毎回同じ条件で作り、中央値を出します。
-
-## 現状記録
-
-`2026-03-18`、`uv run python tools/benchmark_phase3.py`、`functions=400`、`iterations=3` の結果:
-
-| case | median ms | runs ms |
-| --- | ---: | --- |
-| `parse_source(c)` | 42.20 | `42.20, 34.47, 43.53` |
-| `parse_source(cpp)` | 34.89 | `37.32, 34.89, 33.07` |
-| `function(c)` | 336.67 | `413.21, 336.67, 320.93` |
-| `flow(c)` | 320.80 | `331.94, 311.63, 320.80` |
-| `path(c)` | 359.48 | `359.48, 391.83, 312.69` |
-| `function(cpp)` | 331.48 | `585.08, 323.05, 331.48` |
-| `flow(cpp)` | 327.49 | `326.47, 327.49, 360.31` |
-| `path(cpp)` | 373.08 | `349.63, 415.10, 373.08` |
-
-観察:
-
-- parse 単体は 35-45ms 前後で、CLI end-to-end より十分小さい
-- 現時点の支配コストは Python 起動を含む end-to-end 実行
-- `path` は C / C++ ともに他サブコマンドよりやや重い
+- 多件入力で極端に遅くなっていないか
+- parse 再利用が壊れていないか
+- route 追加や renderer 変更で run 全体の時間が不自然に増えていないか
+- 想定運用である「絞り込み後の候補 file 集合」に対して体感が悪化していないか

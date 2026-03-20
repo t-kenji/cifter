@@ -27,9 +27,10 @@
 
 ## バージョンとタグ
 
-- version は `0.minor.patch` とする
-- `minor` は CLI、出力、対応範囲など利用者影響のある変更で更新する
-- `patch` は不具合修正、文書、CI、内部整理など利用者影響のない変更で更新する
+- version は semver とする
+- 破壊的変更は `major` を更新する
+- 利用者影響のある後方互換変更は `minor` を更新する
+- 不具合修正、文書、CI、内部整理は `patch` を更新する
 - release tag は `vX.Y.Z` とし、`pyproject.toml` の version と一致しなければならない
 
 ## changelog
