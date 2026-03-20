@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import locale
 import os
 import subprocess
 import sys
@@ -48,25 +49,47 @@ def _venv_command(venv_dir: Path, name: str) -> Path:
     return venv_dir / "bin" / name
 
 
+def _decode_output(raw: bytes) -> str:
+    for encoding in ("utf-8", locale.getpreferredencoding(False)):
+        if not encoding:
+            continue
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _decode_result(result: subprocess.CompletedProcess[bytes]) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=result.args,
+        returncode=result.returncode,
+        stdout=_decode_output(result.stdout),
+        stderr=_decode_output(result.stderr),
+    )
+
+
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         command,
         cwd=cwd,
         check=True,
         capture_output=True,
-        text=True,
+        text=False,
     )
+    return _decode_result(result)
 
 
 def _run_with_input(command: list[str], *, cwd: Path, input_text: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         command,
         cwd=cwd,
         check=True,
         capture_output=True,
-        text=True,
-        input=input_text,
+        text=False,
+        input=input_text.encode("utf-8"),
     )
+    return _decode_result(result)
 
 
 def _read_expected_version(repo_root: Path) -> str:
