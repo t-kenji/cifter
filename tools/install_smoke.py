@@ -161,7 +161,7 @@ def main() -> None:
                 args.function,
                 str(input_path),
                 "--route",
-                "case[CMD_HOGE]/else-if[ret == 11]",
+                "case[CMD_HOGE]/else-if[ret == RETRY_LATER]",
                 "--format",
                 "text",
             ],

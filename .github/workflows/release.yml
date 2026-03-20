@@ -48,7 +48,7 @@ jobs:
         run: python tools/check_dist.py --wheel "dist/*.whl" --sdist "dist/*.tar.gz"
 
       - name: Run install smoke
-        run: python tools/install_smoke.py --wheel "dist/*.whl" --input examples/demo.c --function FooFunction
+        run: python tools/install_smoke.py --wheel "dist/*.whl" --input examples/showcase/c/control_flow.c --function DispatchCommand
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
