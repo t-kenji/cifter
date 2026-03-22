@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from cifter.errors import CiftError
-from cifter.model import FormatMode, LanguageMode, ResolvedInputFile, RunResult
+from cifter.model import FormatMode, LanguageMode, RunResult
 from cifter.render_json import render_result_json
 from cifter.render_text import print_result_text
 from cifter.run import resolve_input_files, resolve_output_format, run_flow, run_function, run_route
@@ -67,29 +67,16 @@ def common_options(
 
 FilesFromOption = Annotated[
     list[str] | None,
-    typer.Option(
-        "--files-from",
-        help="1 行 1 path の一覧 file。`-` で標準入力から読む",
-    ),
+    typer.Option("--files-from", help="1 行 1 path の一覧 file。`-` で標準入力から読む"),
 ]
-
 ColorOption = Annotated[
     bool | None,
-    typer.Option(
-        "--color/--no-color",
-        help="text 出力のシンタックスハイライトを制御する",
-    ),
+    typer.Option("--color/--no-color", help="text 出力のシンタックスハイライトを制御する"),
 ]
-
 LanguageOption = Annotated[
     LanguageMode,
-    typer.Option(
-        "--language",
-        help="解析言語を指定する。既定は auto",
-        case_sensitive=False,
-    ),
+    typer.Option("--language", help="解析言語を指定する。既定は auto", case_sensitive=False),
 ]
-
 FormatOption = Annotated[
     FormatMode,
     typer.Option(
@@ -98,13 +85,9 @@ FormatOption = Annotated[
         case_sensitive=False,
     ),
 ]
-
 StrictInputsOption = Annotated[
     bool,
-    typer.Option(
-        "--strict-inputs",
-        help="未一致 file を warning ではなく失敗として扱う",
-    ),
+    typer.Option("--strict-inputs", help="未一致 file を warning ではなく失敗として扱う"),
 ]
 
 
@@ -123,20 +106,19 @@ def function_command(
     ] = None,
     files_from: FilesFromOption = None,
 ) -> None:
-    run_result = _run_with_input_resolution(
+    _exit_with_run_result(
         lambda resolved_inputs: run_function(
             symbol,
             inputs=resolved_inputs,
-            defines=defines or [],
+            defines=_string_values(defines),
             language=language,
             strict_inputs=strict_inputs,
         ),
-        inputs=inputs or [],
-        files_from=files_from or [],
+        inputs=_path_values(inputs),
+        files_from=_string_values(files_from),
         format_mode=format_mode,
         color=color,
     )
-    raise typer.Exit(code=0 if run_result.ok else 1)
 
 
 @app.command("flow", help="制御構造の骨格と追跡行を切り出す")
@@ -146,7 +128,9 @@ def flow_command(
     *,
     language: LanguageOption = "auto",
     track: Annotated[list[str] | None, typer.Option("--track", help="保持するアクセスパス")] = None,
-    highlight: Annotated[bool, typer.Option("--highlight", help="`--track` 一致箇所を追加強調する")] = False,
+    highlight: Annotated[
+        bool, typer.Option("--highlight", help="`--track` 一致箇所を追加強調する")
+    ] = False,
     format_mode: FormatOption = "auto",
     color: ColorOption = None,
     strict_inputs: StrictInputsOption = False,
@@ -156,22 +140,21 @@ def flow_command(
     ] = None,
     files_from: FilesFromOption = None,
 ) -> None:
-    run_result = _run_with_input_resolution(
+    _exit_with_run_result(
         lambda resolved_inputs: run_flow(
             symbol,
             inputs=resolved_inputs,
-            defines=defines or [],
+            defines=_string_values(defines),
             language=language,
-            track=track or [],
+            track=_string_values(track),
             include_highlights=highlight,
             strict_inputs=strict_inputs,
         ),
-        inputs=inputs or [],
-        files_from=files_from or [],
+        inputs=_path_values(inputs),
+        files_from=_string_values(files_from),
         format_mode=format_mode,
         color=color,
     )
-    raise typer.Exit(code=0 if run_result.ok else 1)
 
 
 @app.command("route", help="指定 route DSL に沿う枝だけを切り出す")
@@ -190,25 +173,50 @@ def route_command(
     ] = None,
     files_from: FilesFromOption = None,
 ) -> None:
-    run_result = _run_with_input_resolution(
+    _exit_with_run_result(
         lambda resolved_inputs: run_route(
             symbol,
             inputs=resolved_inputs,
-            defines=defines or [],
+            defines=_string_values(defines),
             language=language,
             routes=route,
             strict_inputs=strict_inputs,
         ),
-        inputs=inputs or [],
-        files_from=files_from or [],
+        inputs=_path_values(inputs),
+        files_from=_string_values(files_from),
         format_mode=format_mode,
         color=color,
     )
-    raise typer.Exit(code=0 if run_result.ok else 1)
+
+
+def _string_values(values: list[str] | None) -> list[str]:
+    return values or []
+
+
+def _path_values(values: list[Path] | None) -> list[Path]:
+    return values or []
+
+
+def _exit_with_run_result(
+    task: Callable[[tuple[Path, ...]], RunResult],
+    *,
+    inputs: list[Path],
+    files_from: list[str],
+    format_mode: FormatMode,
+    color: bool | None,
+) -> None:
+    run_result = _run_with_input_resolution(
+        task,
+        inputs=inputs,
+        files_from=files_from,
+        format_mode=format_mode,
+        color=color,
+    )
+    raise typer.Exit(code=0 if _succeeded(run_result) else 1)
 
 
 def _run_with_input_resolution(
-    task: Callable[[tuple[ResolvedInputFile, ...]], RunResult],
+    task: Callable[[tuple[Path, ...]], RunResult],
     *,
     inputs: list[Path],
     files_from: list[str],
@@ -226,10 +234,7 @@ def _run_with_input_resolution(
 
 
 def _write_run_result(run_result: RunResult, *, format_mode: FormatMode, color: bool | None) -> None:
-    if format_mode == "auto" and color is not None:
-        output_format: FormatMode = "text"
-    else:
-        output_format = resolve_output_format(format_mode, is_tty=getattr(sys.stdout, "isatty", lambda: False)())
+    output_format = _resolved_output_format(format_mode, color)
     if output_format == "json":
         typer.echo(render_result_json(run_result))
         return
@@ -238,3 +243,13 @@ def _write_run_result(run_result: RunResult, *, format_mode: FormatMode, color: 
     for diagnostic in run_result.diagnostics:
         prefix = f"{diagnostic.file}: " if diagnostic.file is not None else ""
         typer.echo(f"{prefix}{diagnostic.message}", err=True)
+
+
+def _resolved_output_format(format_mode: FormatMode, color: bool | None) -> FormatMode:
+    if format_mode == "auto" and color is not None:
+        return "text"
+    return resolve_output_format(format_mode, is_tty=getattr(sys.stdout, "isatty", lambda: False)())
+
+
+def _succeeded(run_result: RunResult) -> bool:
+    return not any(diagnostic.severity == "error" for diagnostic in run_result.diagnostics)

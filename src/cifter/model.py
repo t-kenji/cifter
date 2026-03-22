@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -8,28 +9,16 @@ from typing import Literal
 from cifter.errors import CiftError
 
 TRACK_PATH_PATTERN = re.compile(r"^[A-Za-z_]\w*(?:(?:->|\.)[A-Za-z_]\w*)*$")
-SUPPORTED_SOURCE_EXTENSIONS = {
-    ".c",
-    ".h",
-    ".cc",
-    ".cpp",
-    ".cxx",
-    ".c++",
-    ".hpp",
-    ".hh",
-    ".hxx",
-    ".h++",
-}
+SUPPORTED_SOURCE_EXTENSIONS = {".c", ".h", ".cc", ".cpp", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".h++"}
 ParseDiagnosticCategory = Literal["language", "parse", "preprocess", "input"]
-ParseQualityLevel = Literal["clean", "degraded"]
 LanguageMode = Literal["auto", "c", "cpp"]
 LanguageResolution = Literal["explicit", "extension", "quality"]
 InlineHighlightKind = Literal["track_match"]
 RouteSegmentKind = Literal["case", "default", "else_if", "else", "for", "while", "do_while", "if"]
 FormatMode = Literal["auto", "text", "json"]
 CommandName = Literal["function", "flow", "route"]
-InputOrigin = Literal["argv", "files_from"]
 DiagnosticSeverity = Literal["error", "warning"]
+_RoutePayloadMode = Literal["none", "required", "optional"]
 
 
 @dataclass(frozen=True)
@@ -45,18 +34,6 @@ class ParseDiagnostic:
     code: str
     message: str
     details: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class ParseQualityReport:
-    level: ParseQualityLevel
-    diagnostics: tuple[ParseDiagnostic, ...] = ()
-
-    @classmethod
-    def from_diagnostics(cls, diagnostics: tuple[ParseDiagnostic, ...]) -> ParseQualityReport:
-        if diagnostics:
-            return cls(level="degraded", diagnostics=diagnostics)
-        return cls(level="clean", diagnostics=())
 
 
 @dataclass(frozen=True)
@@ -81,17 +58,6 @@ class ExtractionResult:
 
 
 @dataclass(frozen=True)
-class InputSpec:
-    path: Path
-    origin: InputOrigin
-
-
-@dataclass(frozen=True)
-class ResolvedInputFile:
-    path: Path
-
-
-@dataclass(frozen=True)
 class RunDiagnostic:
     severity: DiagnosticSeverity
     code: str
@@ -101,10 +67,9 @@ class RunDiagnostic:
 
 @dataclass(frozen=True)
 class ExtractionItem:
-    command: CommandName
     file: Path
     symbol: str
-    kind: str
+    kind: CommandName
     span: SourceSpan
     language: str
     lines: tuple[ExtractedLine, ...]
@@ -116,13 +81,9 @@ class ExtractionItem:
 class RunResult:
     tool_version: str
     command: CommandName
-    inputs: tuple[ResolvedInputFile, ...]
+    inputs: tuple[Path, ...]
     results: tuple[ExtractionItem, ...]
     diagnostics: tuple[RunDiagnostic, ...] = ()
-
-    @property
-    def ok(self) -> bool:
-        return not any(diagnostic.severity == "error" for diagnostic in self.diagnostics)
 
 
 @dataclass(frozen=True)
@@ -150,55 +111,18 @@ class RouteSegment:
         value = raw.strip()
         if not value:
             raise CiftError("空の route 要素は指定できません")
-        if payload := _extract_required_payload(value, "case"):
-            normalized = payload.strip()
-            return cls(kind="case", raw=value, payload=payload, normalized_payload=normalized)
-        if value == "default":
-            return cls(kind="default", raw=value)
-        if payload := _extract_required_payload(value, "else-if"):
-            return cls(
-                kind="else_if",
-                raw=value,
-                payload=payload,
-                normalized_payload=normalize_condition_text(payload),
-            )
-        if value == "else":
-            return cls(kind="else", raw=value)
-        if value == "for":
-            return cls(kind="for", raw=value)
-        if payload := _extract_optional_payload(value, "for"):
-            return cls(
-                kind="for",
-                raw=value,
-                payload=payload,
-                normalized_payload=normalize_loop_header_text(payload),
-            )
-        if value == "while":
-            return cls(kind="while", raw=value)
-        if payload := _extract_optional_payload(value, "while"):
-            return cls(
-                kind="while",
-                raw=value,
-                payload=payload,
-                normalized_payload=normalize_condition_text(payload),
-            )
-        if value == "do-while":
-            return cls(kind="do_while", raw=value)
-        if payload := _extract_optional_payload(value, "do-while"):
-            return cls(
-                kind="do_while",
-                raw=value,
-                payload=payload,
-                normalized_payload=normalize_condition_text(payload),
-            )
-        if payload := _extract_required_payload(value, "if"):
-            return cls(
-                kind="if",
-                raw=value,
-                payload=payload,
-                normalized_payload=normalize_condition_text(payload),
-            )
+        segment = _parse_route_segment(value)
+        if segment is not None:
+            return segment
         raise CiftError(f"不正な --route 要素です: {raw}")
+
+
+@dataclass(frozen=True)
+class _RouteSegmentSpec:
+    keyword: str
+    kind: RouteSegmentKind
+    payload_mode: _RoutePayloadMode = "none"
+    normalizer: Callable[[str], str] | None = None
 
 
 def normalize_condition_text(text: str) -> str:
@@ -210,6 +134,38 @@ def normalize_condition_text(text: str) -> str:
 
 def normalize_loop_header_text(text: str) -> str:
     return _collapse_whitespace_preserving_literals(text.strip())
+
+
+_ROUTE_SEGMENT_SPECS = (
+    _RouteSegmentSpec("case", "case", "required", str.strip),
+    _RouteSegmentSpec("default", "default"),
+    _RouteSegmentSpec("else-if", "else_if", "required", normalize_condition_text),
+    _RouteSegmentSpec("else", "else"),
+    _RouteSegmentSpec("for", "for"),
+    _RouteSegmentSpec("for", "for", "optional", normalize_loop_header_text),
+    _RouteSegmentSpec("while", "while"),
+    _RouteSegmentSpec("while", "while", "optional", normalize_condition_text),
+    _RouteSegmentSpec("do-while", "do_while"),
+    _RouteSegmentSpec("do-while", "do_while", "optional", normalize_condition_text),
+    _RouteSegmentSpec("if", "if", "required", normalize_condition_text),
+)
+
+
+def _parse_route_segment(value: str) -> RouteSegment | None:
+    for spec in _ROUTE_SEGMENT_SPECS:
+        matched, payload = _payload_for_route_spec(value, spec)
+        if not matched:
+            continue
+        normalized = payload
+        if payload is not None and spec.normalizer is not None:
+            normalized = spec.normalizer(payload)
+        return RouteSegment(
+            kind=spec.kind,
+            raw=value,
+            payload=payload,
+            normalized_payload=normalized,
+        )
+    return None
 
 
 def _covers_entire_text(text: str) -> bool:
@@ -303,26 +259,19 @@ def _split_route(route: str) -> list[str]:
     return parts
 
 
-def _extract_required_payload(value: str, keyword: str) -> str | None:
-    if value == keyword:
-        raise CiftError(f"不正な --route 要素です: {value}")
-    payload = _extract_payload(value, keyword)
+def _payload_for_route_spec(value: str, spec: _RouteSegmentSpec) -> tuple[bool, str | None]:
+    if spec.payload_mode == "none":
+        return value == spec.keyword, None
+    if value == spec.keyword:
+        if spec.payload_mode == "required":
+            raise CiftError(f"不正な --route 要素です: {value}")
+        return True, None
+    payload = _extract_payload(value, spec.keyword)
     if payload is None:
-        return None
+        return False, None
     if not payload.strip():
         raise CiftError(f"不正な --route 要素です: {value}")
-    return payload
-
-
-def _extract_optional_payload(value: str, keyword: str) -> str | None:
-    if value == keyword:
-        return None
-    payload = _extract_payload(value, keyword)
-    if payload is None:
-        return None
-    if not payload.strip():
-        raise CiftError(f"不正な --route 要素です: {value}")
-    return payload
+    return True, payload
 
 
 def _extract_payload(value: str, keyword: str) -> str | None:

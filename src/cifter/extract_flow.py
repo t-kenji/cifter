@@ -4,53 +4,12 @@ from tree_sitter import Node
 
 from cifter.model import ExtractedLine, ExtractionResult, InlineHighlightSpan, TrackPath
 from cifter.omission import attach_omission_markers
-from cifter.parser import ParsedSource, find_function, function_body, node_text
+from cifter.parser import ParsedSource, function_body, node_text
 from cifter.tree_helpers import case_body_container, container_statements, else_clause
 
-CONTROL_TYPES = {
-    "if_statement",
-    "switch_statement",
-    "case_statement",
-    "for_statement",
-    "while_statement",
-    "do_statement",
-    "goto_statement",
-    "break_statement",
-    "continue_statement",
-    "return_statement",
-    "labeled_statement",
-}
-
-STATEMENT_TYPES = {
-    "expression_statement",
-    "declaration",
-    "goto_statement",
-    "break_statement",
-    "continue_statement",
-    "return_statement",
-}
-def extract_flow(
-    parsed: ParsedSource,
-    function_name: str,
-    tracks: tuple[TrackPath, ...],
-    *,
-    include_highlights: bool = False,
-) -> ExtractionResult:
-    return extract_flow_node(
-        parsed,
-        find_function(parsed, function_name),
-        tracks,
-        include_highlights=include_highlights,
-    )
-
-
-def extract_flow_node(
-    parsed: ParsedSource,
-    function_node: Node,
-    tracks: tuple[TrackPath, ...],
-    *,
-    include_highlights: bool = False,
-) -> ExtractionResult:
+CONTROL_TYPES = {"if_statement", "switch_statement", "case_statement", "for_statement", "while_statement", "do_statement", "goto_statement", "break_statement", "continue_statement", "return_statement", "labeled_statement"}
+STATEMENT_TYPES = {"expression_statement", "declaration", "goto_statement", "break_statement", "continue_statement", "return_statement"}
+def extract_flow_node(parsed: ParsedSource, function_node: Node, tracks: tuple[TrackPath, ...], *, include_highlights: bool = False) -> ExtractionResult:
     body = function_body(function_node)
     keep: set[int] = set()
     highlights: dict[int, set[InlineHighlightSpan]] = {}
@@ -65,7 +24,11 @@ def extract_flow_node(
             highlights=tuple(
                 sorted(
                     highlights.get(line_no, ()),
-                    key=lambda highlight: (highlight.start_column, highlight.end_column, highlight.kind),
+                    key=lambda highlight: (
+                        highlight.start_column,
+                        highlight.end_column,
+                        highlight.kind,
+                    ),
                 )
             ),
         )
@@ -75,69 +38,60 @@ def extract_flow_node(
     return ExtractionResult(span=parsed.source.span_for_lines(line_numbers), lines=lines)
 
 
-def _collect_from_container(
-    parsed: ParsedSource,
-    container: Node,
-    keep: set[int],
-    highlights: dict[int, set[InlineHighlightSpan]],
-    tracks: tuple[TrackPath, ...],
-    include_highlights: bool,
-) -> None:
+def _collect_from_container(parsed: ParsedSource, container: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool) -> None:
     for statement in container_statements(container):
         _collect_statement(parsed, statement, keep, highlights, tracks, include_highlights)
 
 
-def _collect_statement(
-    parsed: ParsedSource,
-    statement: Node,
-    keep: set[int],
-    highlights: dict[int, set[InlineHighlightSpan]],
-    tracks: tuple[TrackPath, ...],
-    include_highlights: bool,
-) -> None:
+def _collect_statement(parsed: ParsedSource, statement: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool) -> None:
     track_matches = _collect_track_matches(parsed, statement, tracks)
     if include_highlights:
         _record_track_highlights(parsed, track_matches, highlights)
     if statement.type == "switch_statement":
-        body = statement.named_children[-1]
-        _keep_range(keep, statement.start_point.row + 1, body.start_point.row + 1)
-        keep.add(body.end_point.row + 1)
-        _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
+        _collect_container_statement(
+            parsed,
+            statement,
+            statement.named_children[-1],
+            keep,
+            highlights,
+            tracks,
+            include_highlights,
+        )
         return
     if statement.type == "case_statement":
-        keep.add(statement.start_point.row + 1)
-        body = case_body_container(statement)
-        if body is not statement:
-            _keep_range(keep, body.start_point.row + 1, body.start_point.row + 1)
-            keep.add(body.end_point.row + 1)
-        _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
+        _collect_case_statement(parsed, statement, keep, highlights, tracks, include_highlights)
         return
     if statement.type == "if_statement":
         _collect_if_chain(parsed, statement, keep, highlights, tracks, include_highlights)
         return
     if statement.type in {"for_statement", "while_statement"}:
-        body = statement.named_children[-1]
-        _keep_range(keep, statement.start_point.row + 1, body.start_point.row + 1)
-        if body.type == "compound_statement":
-            keep.add(body.end_point.row + 1)
-            _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
-        else:
-            _collect_statement(parsed, body, keep, highlights, tracks, include_highlights)
+        _collect_container_statement(
+            parsed,
+            statement,
+            statement.named_children[-1],
+            keep,
+            highlights,
+            tracks,
+            include_highlights,
+        )
         return
     if statement.type == "do_statement":
-        body = statement.named_children[0]
-        keep.add(statement.start_point.row + 1)
-        keep.add(statement.end_point.row + 1)
-        if body.type == "compound_statement":
-            keep.add(body.end_point.row + 1)
-            _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
-        else:
-            _collect_statement(parsed, body, keep, highlights, tracks, include_highlights)
+        keep.update({statement.start_point.row + 1, statement.end_point.row + 1})
+        _collect_nested_statement(
+            parsed,
+            statement.named_children[0],
+            keep,
+            highlights,
+            tracks,
+            include_highlights,
+            keep_closing=True,
+        )
         return
     if statement.type == "labeled_statement":
         keep.add(statement.start_point.row + 1)
-        nested = statement.named_children[-1]
-        _collect_statement(parsed, nested, keep, highlights, tracks, include_highlights)
+        _collect_statement(
+            parsed, statement.named_children[-1], keep, highlights, tracks, include_highlights
+        )
         return
     if statement.type in CONTROL_TYPES:
         _keep_range(keep, statement.start_point.row + 1, statement.end_point.row + 1)
@@ -146,21 +100,12 @@ def _collect_statement(
         _keep_range(keep, statement.start_point.row + 1, statement.end_point.row + 1)
 
 
-def _collect_if_chain(
-    parsed: ParsedSource,
-    if_node: Node,
-    keep: set[int],
-    highlights: dict[int, set[InlineHighlightSpan]],
-    tracks: tuple[TrackPath, ...],
-    include_highlights: bool,
-) -> None:
+def _collect_if_chain(parsed: ParsedSource, if_node: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool) -> None:
     consequence = if_node.named_children[1]
     _keep_range(keep, if_node.start_point.row + 1, consequence.start_point.row + 1)
-    if consequence.type == "compound_statement":
-        keep.add(consequence.end_point.row + 1)
-        _collect_from_container(parsed, consequence, keep, highlights, tracks, include_highlights)
-    else:
-        _collect_statement(parsed, consequence, keep, highlights, tracks, include_highlights)
+    _collect_nested_statement(
+        parsed, consequence, keep, highlights, tracks, include_highlights, keep_closing=True
+    )
 
     clause = else_clause(if_node)
     if clause is None:
@@ -170,18 +115,38 @@ def _collect_if_chain(
     if alternative.type == "if_statement":
         _collect_if_chain(parsed, alternative, keep, highlights, tracks, include_highlights)
         return
-    if alternative.type == "compound_statement":
-        keep.add(alternative.end_point.row + 1)
-        _collect_from_container(parsed, alternative, keep, highlights, tracks, include_highlights)
+    _collect_nested_statement(
+        parsed, alternative, keep, highlights, tracks, include_highlights, keep_closing=True
+    )
+
+
+def _collect_case_statement(parsed: ParsedSource, statement: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool) -> None:
+    keep.add(statement.start_point.row + 1)
+    body = case_body_container(statement)
+    if body is statement:
+        _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
         return
-    _collect_statement(parsed, alternative, keep, highlights, tracks, include_highlights)
+    keep.update({body.start_point.row + 1, body.end_point.row + 1})
+    _collect_from_container(parsed, body, keep, highlights, tracks, include_highlights)
 
 
-def _record_track_highlights(
-    parsed: ParsedSource,
-    matches: tuple[Node, ...],
-    highlights: dict[int, set[InlineHighlightSpan]],
-) -> None:
+def _collect_container_statement(parsed: ParsedSource, statement: Node, body: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool) -> None:
+    _keep_range(keep, statement.start_point.row + 1, body.start_point.row + 1)
+    _collect_nested_statement(
+        parsed, body, keep, highlights, tracks, include_highlights, keep_closing=True
+    )
+
+
+def _collect_nested_statement(parsed: ParsedSource, statement: Node, keep: set[int], highlights: dict[int, set[InlineHighlightSpan]], tracks: tuple[TrackPath, ...], include_highlights: bool, *, keep_closing: bool = False) -> None:
+    if statement.type != "compound_statement":
+        _collect_statement(parsed, statement, keep, highlights, tracks, include_highlights)
+        return
+    if keep_closing:
+        keep.add(statement.end_point.row + 1)
+    _collect_from_container(parsed, statement, keep, highlights, tracks, include_highlights)
+
+
+def _record_track_highlights(parsed: ParsedSource, matches: tuple[Node, ...], highlights: dict[int, set[InlineHighlightSpan]]) -> None:
     for match in matches:
         for line_no, start_column, end_column in parsed.source.inline_spans_for_byte_range(
             match.start_byte,
@@ -219,10 +184,13 @@ def _collect_track_matches(parsed: ParsedSource, node: Node, tracks: tuple[Track
 def _track_candidate_text(parsed: ParsedSource, node: Node) -> str | None:
     if node.type == "field_expression":
         return "".join(node_text(parsed.source, node).split())
-    if node.type == "identifier" and node.parent is not None and node.parent.type != "field_expression":
+    if (
+        node.type == "identifier"
+        and node.parent is not None
+        and node.parent.type != "field_expression"
+    ):
         return node_text(parsed.source, node)
     return None
 
 
-def _keep_range(keep: set[int], start_line: int, end_line: int) -> None:
-    keep.update(range(start_line, end_line + 1))
+def _keep_range(keep: set[int], start_line: int, end_line: int) -> None: keep.update(range(start_line, end_line + 1))

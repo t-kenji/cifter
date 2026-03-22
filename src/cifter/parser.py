@@ -14,21 +14,14 @@ from cifter.model import (
     LanguageMode,
     LanguageResolution,
     ParseDiagnostic,
-    ParseQualityReport,
     SourceSpan,
 )
 from cifter.preprocessor import preprocess_source
 
 CPP_EXTENSIONS = {".cc", ".cpp", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".h++"}
 QUALITY_COMPARE_EXTENSIONS = {".h"}
-_LANGUAGE_CACHE = {
-    "c": Language(tree_sitter_c.language()),
-    "cpp": Language(tree_sitter_cpp.language()),
-}
-_PARSER_CACHE = {
-    "c": Parser(_LANGUAGE_CACHE["c"]),
-    "cpp": Parser(_LANGUAGE_CACHE["cpp"]),
-}
+_LANGUAGE_CACHE = {"c": Language(tree_sitter_c.language()), "cpp": Language(tree_sitter_cpp.language())}
+_PARSER_CACHE = {"c": Parser(_LANGUAGE_CACHE["c"]), "cpp": Parser(_LANGUAGE_CACHE["cpp"])}
 
 
 @dataclass(frozen=True)
@@ -79,7 +72,9 @@ class SourceFile:
         start_byte = self.line_start_byte(line_no)
         return self.text_bytes[start_byte:end_byte].decode("utf-8").rstrip()
 
-    def inline_spans_for_byte_range(self, start_byte: int, end_byte: int) -> tuple[tuple[int, int, int], ...]:
+    def inline_spans_for_byte_range(
+        self, start_byte: int, end_byte: int
+    ) -> tuple[tuple[int, int, int], ...]:
         if start_byte >= end_byte:
             return ()
         start_line_index = self._line_index_for_byte(start_byte)
@@ -115,7 +110,7 @@ class ParsedSource:
     language_name: str
     resolved_language: str
     language_resolution: LanguageResolution
-    quality: ParseQualityReport
+    diagnostics: tuple[ParseDiagnostic, ...]
 
 
 @dataclass(frozen=True)
@@ -147,14 +142,13 @@ def parse_source(path: Path, defines: list[str], language: LanguageMode = "auto"
     source = SourceFile.from_text(path, preprocessed.text)
     attempt, resolution = _resolve_parse_attempt(path, source, language)
     diagnostics = normalized_input.diagnostics + preprocessed.diagnostics + _parse_diagnostics(attempt.metrics)
-    quality = ParseQualityReport.from_diagnostics(diagnostics)
     return ParsedSource(
         source=source,
         tree=attempt.tree,
         language_name=attempt.language_name,
         resolved_language=attempt.language_name,
         language_resolution=resolution,
-        quality=quality,
+        diagnostics=diagnostics,
     )
 
 
@@ -185,10 +179,6 @@ def function_body(function_node: Node) -> Node:
 
 def node_text(source: SourceFile, node: Node) -> str:
     return source.text_bytes[node.start_byte:node.end_byte].decode("utf-8")
-
-
-def condition_text(source: SourceFile, node: Node) -> str:
-    return node_text(source, node)
 
 
 def _read_and_normalize_source(path: Path) -> _NormalizedInput:
@@ -259,9 +249,7 @@ def _best_parse_attempt(text_bytes: bytes, *, prefer_c: bool) -> _ParseAttempt:
         return c_attempt
     if cpp_attempt.metrics.sort_key() < c_attempt.metrics.sort_key():
         return cpp_attempt
-    if prefer_c:
-        return c_attempt
-    return cpp_attempt
+    return c_attempt if prefer_c else cpp_attempt
 
 
 def _parse_attempt(text_bytes: bytes, language_name: str) -> _ParseAttempt:
@@ -307,8 +295,7 @@ def _parse_diagnostics(metrics: _ParseMetrics) -> tuple[ParseDiagnostic, ...]:
     return tuple(diagnostics)
 
 
-def _build_parser(language_name: str) -> Parser:
-    return _PARSER_CACHE[language_name]
+def _build_parser(language_name: str) -> Parser: return _PARSER_CACHE[language_name]
 
 
 def _iter_nodes(root: Node) -> Iterator[Node]:
@@ -338,9 +325,7 @@ def _function_definition_node(node: Node) -> Node | None:
     if node.type == "function_definition":
         return node
     if node.type == "template_declaration":
-        for child in node.named_children:
-            if child.type == "function_definition":
-                return child
+        return next((child for child in node.named_children if child.type == "function_definition"), None)
     return None
 
 

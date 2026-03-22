@@ -38,12 +38,7 @@ def render_result_text(run_result: RunResult) -> str:
         return ""
     if len(run_result.results) == 1:
         return _render_lines(run_result.results[0].lines)
-
-    chunks: list[str] = []
-    for item in run_result.results:
-        chunks.append(_item_header(item))
-        chunks.append(_render_lines(item.lines))
-    return "\n\n".join(chunks)
+    return "\n\n".join(part for item in run_result.results for part in (_item_header(item), _render_lines(item.lines)))
 
 
 def print_result_text(
@@ -58,7 +53,6 @@ def print_result_text(
         if rendered:
             output.write(f"{rendered}\n")
         return
-
     if not run_result.results:
         return
     console = Console(file=StringIO(), record=True, force_terminal=True, color_system="truecolor")
@@ -74,20 +68,18 @@ def print_result_text(
 
 def _render_lines(lines: tuple[ExtractedLine, ...]) -> str:
     width = len(str(lines[-1].line_no))
-    rendered: list[str] = []
-    for line in lines:
-        rendered.append(f"{line.line_no:>{width}}: {line.text}")
-        if line.omitted_after_indent is not None:
-            rendered.append(f"{' ' * (width + 2)}{line.omitted_after_indent}...")
-    return "\n".join(rendered)
+    return "\n".join(
+        part
+        for line in lines
+        for part in (
+            f"{line.line_no:>{width}}: {line.text}",
+            *(() if line.omitted_after_indent is None else (f"{' ' * (width + 2)}{line.omitted_after_indent}...",)),
+        )
+    )
 
 
 def _item_header(item: ExtractionItem) -> str:
-    header = (
-        f"file: {item.file} "
-        f"[{item.span.start_line}-{item.span.end_line}] "
-        f"command={item.command} symbol={item.symbol}"
-    )
+    header = f"file: {item.file} [{item.span.start_line}-{item.span.end_line}] command={item.kind} symbol={item.symbol}"
     if item.routes:
         header += f" route={', '.join(item.routes)}"
     return header
@@ -128,7 +120,7 @@ def _apply_inline_highlights(
 
 def _rendered_column_for_source_column(source_text: str, source_column: int) -> int:
     rendered_column = 0
-    for char in source_text[: max(0, min(source_column, len(source_text)))]:
+    for char in source_text[:max(0, min(source_column, len(source_text)))]:
         if char == "\t":
             rendered_column += TAB_SIZE - (rendered_column % TAB_SIZE)
             continue

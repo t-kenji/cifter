@@ -7,14 +7,18 @@ from cifter.render_text import render_result_text
 
 
 def render_result_json(run_result: RunResult) -> str:
-    payload = {
-        "tool_version": run_result.tool_version,
-        "command": run_result.command,
-        "inputs": [str(item.path) for item in run_result.inputs],
-        "results": [_serialize_item(item) for item in run_result.results],
-        "diagnostics": [_serialize_run_diagnostic(item) for item in run_result.diagnostics],
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+    return json.dumps(
+        {
+            "tool_version": run_result.tool_version,
+            "command": run_result.command,
+            "inputs": [str(path) for path in run_result.inputs],
+            "results": [_serialize_item(item) for item in run_result.results],
+            "diagnostics": [_serialize_run_diagnostic(item) for item in run_result.diagnostics],
+        },
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
 
 
 def _serialize_item(item: ExtractionItem) -> dict[str, object]:
@@ -47,7 +51,7 @@ def _serialize_item(item: ExtractionItem) -> dict[str, object]:
         "rendered_text": render_result_text(
             RunResult(
                 tool_version="",
-                command=item.command,
+                command=item.kind,
                 inputs=(),
                 results=(item,),
                 diagnostics=(),
@@ -63,7 +67,7 @@ def _serialize_parse_diagnostic(diagnostic: ParseDiagnostic) -> dict[str, object
         "category": diagnostic.category,
         "code": diagnostic.code,
         "message": diagnostic.message,
-        "details": {key: value for key, value in diagnostic.details},
+        "details": dict(diagnostic.details),
     }
 
 

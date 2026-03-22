@@ -179,6 +179,4 @@ def _evaluate_condition(processor: Preprocessor, directive: _Directive) -> bool:
 
 def _normalize_define(value: str) -> str:
     name, separator, body = value.partition("=")
-    if not separator:
-        return value
-    return f"{name.strip()} {body.strip()}"
+    return value if not separator else f"{name.strip()} {body.strip()}"
