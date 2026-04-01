@@ -113,6 +113,14 @@ cift route DecideMode examples/quickstart/decide_mode.c --route 'else-if[value =
 
 `else if` の枝だけを確認したい、のような場面に向いています。
 
+行番号から route を逆引きしたいとき:
+
+```sh
+cift route DecideMode examples/quickstart/decide_mode.c --infer-from-line 8 --format text
+```
+
+`grep -n` などで見つけた行から、対応する full route を自動推論して抽出できます。
+
 検索結果をそのまま渡したいとき:
 
 ```sh
@@ -181,8 +189,9 @@ cift function MirrorValue --files-from examples/multi_input/targets.txt --format
 `route`
 
 - 特定の分岐だけを見たいときに使います
-- 形式: `cift route <symbol> [inputs...] --route <route>...`
+- 形式: `cift route <symbol> [inputs...] (--route <route>... | --infer-from-line <line>)`
 - `--route` は「分岐の通り道を文字列で指定する書き方」です
+- `--infer-from-line` は、単一 file 内の行番号から full route を推論して抽出します
 
 共通オプション:
 

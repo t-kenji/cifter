@@ -1,6 +1,6 @@
 # route DSL
 
-この文書は、`cift route --route` で使う route DSL の人間向けリファレンスです。
+この文書は、`cift route --route` と `cift route --infer-from-line` で使う route DSL の人間向けリファレンスです。
 開発者だけでなく、DSL を使いこなしたい利用者も読む前提で書いています。
 厳密な正本は [specs/route-dsl.md](specs/route-dsl.md) です。
 
@@ -15,6 +15,14 @@ cift route DecideMode examples/quickstart/decide_mode.c --route 'else-if[value =
 ```
 
 この例は「`else if (value == 10)` の枝だけを残したい」という意味です。
+
+行番号から逆引きしたいときは、次のように `--infer-from-line` を使えます。
+
+```sh
+cift route DecideMode examples/quickstart/decide_mode.c --infer-from-line 8
+```
+
+この場合は、8 行目を含む最も深い branch path を内部で推論し、その route で抽出します。
 
 ## 基本形
 

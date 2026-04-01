@@ -41,8 +41,14 @@
 
 ## `route`
 
-- 形式は `cift route <symbol> [inputs...] --route <route>...`
-- `--route` は 1 個以上必須で、複数回指定可能
+- 形式は `cift route <symbol> [inputs...] (--route <route>... | --infer-from-line <line>)`
+- `--route` と `--infer-from-line` は排他
+- `--route` は 1 個以上指定可能
+- `--infer-from-line` は 1-based 行番号を 1 個だけ受ける
+- `--infer-from-line` は単一 input file のときだけ指定できる
+- `--infer-from-line` は指定 `symbol` のうち、対象行を span に含む関数がちょうど 1 件のときだけ成功する
+- `--infer-from-line` は対象行を含む最も深い一意な branch path を推論し、その route を使って抽出する
+- 対象行が branch 外にある場合、または最深 path が一意に決まらない場合は失敗する
 - route DSL の正本は [route-dsl.md](route-dsl.md)
 - 指定 route に沿う枝だけを返す
 

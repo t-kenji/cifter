@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- `cift route --infer-from-line <line>` を追加し、単一 file 内の行番号から full route を推論して抽出できるようにした
+
 ## [1.0.0] - 2026-03-20
 
 - 公開 CLI を `cift function|flow|route <symbol> [inputs...]` に再設計

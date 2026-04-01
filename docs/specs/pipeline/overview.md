@@ -17,6 +17,7 @@
 - file 単位で前処理と tree-sitter 解析を行う
 - 同一 run 内では `(path, defines, language)` ごとに parse 結果を再利用する
 - `route` の DSL 解析は run 前段で 1 回だけ行う
+- `route --infer-from-line` は parse 済み AST から対象行を含む branch path を 1 本推論してから通常の route 抽出へ渡す
 
 ## 抽出
 

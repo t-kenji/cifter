@@ -48,6 +48,14 @@ class _RenderedLine:
     priority: _RenderPriority
 
 
+@dataclass(frozen=True)
+class _InferredRouteCandidate:
+    segment: str
+    span_start_line: int
+    span_end_line: int
+    branch: Node
+
+
 def extract_route_node(
     parsed: ParsedSource,
     function_node: Node,
@@ -72,6 +80,134 @@ def extract_route_node(
     )
     lines = attach_omission_markers(parsed.source, lines)
     return ExtractionResult(span=parsed.source.span_for_lines(line_numbers), lines=lines)
+
+
+def infer_route_for_line(parsed: ParsedSource, function_node: Node, line_no: int) -> str:
+    body = function_body(function_node)
+    paths = _infer_paths_from_container(parsed, body, line_no)
+    if not paths:
+        raise CiftError(f"行 {line_no} を含む branch route を特定できません")
+
+    deepest_depth = max(len(path) for path in paths)
+    deepest = sorted(path for path in paths if len(path) == deepest_depth)
+    if len(deepest) != 1:
+        raise CiftError(f"行 {line_no} に対応する branch route が一意に決まりません")
+    return "/".join(deepest[0])
+
+
+def _infer_paths_from_container(
+    parsed: ParsedSource,
+    container: Node,
+    line_no: int,
+) -> set[tuple[str, ...]]:
+    paths: set[tuple[str, ...]] = set()
+    for statement in container_statements(container):
+        paths.update(_infer_paths_from_statement(parsed, statement, line_no))
+    return paths
+
+
+def _infer_paths_from_statement(
+    parsed: ParsedSource,
+    statement: Node,
+    line_no: int,
+) -> set[tuple[str, ...]]:
+    paths: set[tuple[str, ...]] = set()
+    for candidate in _infer_route_candidates(parsed, statement):
+        if not _line_in_range(line_no, candidate.span_start_line, candidate.span_end_line):
+            continue
+        path = (candidate.segment,)
+        paths.add(path)
+        if _line_in_node(line_no, candidate.branch):
+            for nested_path in _infer_paths_from_container(parsed, candidate.branch, line_no):
+                paths.add(path + nested_path)
+    return paths
+
+
+def _infer_route_candidates(parsed: ParsedSource, statement: Node) -> tuple[_InferredRouteCandidate, ...]:
+    if statement.type == "switch_statement":
+        return tuple(_switch_route_candidates(parsed, statement))
+    if statement.type == "if_statement":
+        return tuple(_if_route_candidates(parsed, statement))
+    loop_candidate = _loop_route_candidate(parsed, statement)
+    if loop_candidate is not None:
+        return (loop_candidate,)
+    return ()
+
+
+def _switch_route_candidates(
+    parsed: ParsedSource,
+    switch_node: Node,
+) -> list[_InferredRouteCandidate]:
+    candidates: list[_InferredRouteCandidate] = []
+    for case_node in _switch_cases(switch_node):
+        segment = "default" if _is_default_case(case_node) else f"case[{_case_label_or_error(parsed, case_node)}]"
+        candidates.append(
+            _InferredRouteCandidate(
+                segment=segment,
+                span_start_line=case_node.start_point.row + 1,
+                span_end_line=case_node.end_point.row + 1,
+                branch=case_body_container(case_node),
+            )
+        )
+    return candidates
+
+
+def _if_route_candidates(parsed: ParsedSource, if_node: Node) -> list[_InferredRouteCandidate]:
+    consequence = if_node.named_children[1]
+    candidates = [
+        _InferredRouteCandidate(
+            segment=f"if[{_normalized_if_condition(parsed, if_node)}]",
+            span_start_line=if_node.start_point.row + 1,
+            span_end_line=consequence.end_point.row + 1,
+            branch=consequence,
+        )
+    ]
+    for clause, alternative in _iter_else_chain(if_node):
+        if alternative.type == "if_statement":
+            consequence = alternative.named_children[1]
+            candidates.append(
+                _InferredRouteCandidate(
+                    segment=f"else-if[{_normalized_if_condition(parsed, alternative)}]",
+                    span_start_line=clause.start_point.row + 1,
+                    span_end_line=consequence.end_point.row + 1,
+                    branch=consequence,
+                )
+            )
+            continue
+        candidates.append(
+            _InferredRouteCandidate(
+                segment="else",
+                span_start_line=clause.start_point.row + 1,
+                span_end_line=alternative.end_point.row + 1,
+                branch=alternative,
+            )
+        )
+    return candidates
+
+
+def _loop_route_candidate(parsed: ParsedSource, statement: Node) -> _InferredRouteCandidate | None:
+    if statement.type == "for_statement":
+        return _InferredRouteCandidate(
+            segment=f"for[{_normalized_for_header(parsed, statement)}]",
+            span_start_line=statement.start_point.row + 1,
+            span_end_line=statement.end_point.row + 1,
+            branch=statement.named_children[-1],
+        )
+    if statement.type == "while_statement":
+        return _InferredRouteCandidate(
+            segment=f"while[{_normalized_while_condition(parsed, statement)}]",
+            span_start_line=statement.start_point.row + 1,
+            span_end_line=statement.end_point.row + 1,
+            branch=statement.named_children[-1],
+        )
+    if statement.type == "do_statement":
+        return _InferredRouteCandidate(
+            segment=f"do-while[{_normalized_do_while_condition(parsed, statement)}]",
+            span_start_line=statement.start_point.row + 1,
+            span_end_line=statement.end_point.row + 1,
+            branch=statement.named_children[0],
+        )
+    return None
 
 
 def _collect_path_from_container(
@@ -291,7 +427,14 @@ def _render_if_context(
             _trim_end_byte(alternative, consequence),
         )
     raise CiftError("else 連鎖を特定できません")
-def _keep_compound_closing(rendered: dict[int, _RenderedLine], parsed: ParsedSource, branch: Node, trim_end_byte: int | None) -> None:
+
+
+def _keep_compound_closing(
+    rendered: dict[int, _RenderedLine],
+    parsed: ParsedSource,
+    branch: Node,
+    trim_end_byte: int | None,
+) -> None:
     if branch.type != "compound_statement":
         return
     line_no = branch.end_point.row + 1
@@ -347,7 +490,8 @@ def _merge_rendered(rendered: dict[int, _RenderedLine], route_rendered: dict[int
             rendered[line_no] = item
 
 
-def _switch_cases(switch_node: Node) -> list[Node]: return [child for child in switch_node.named_children[-1].named_children if child.type == "case_statement"]
+def _switch_cases(switch_node: Node) -> list[Node]:
+    return [child for child in switch_node.named_children[-1].named_children if child.type == "case_statement"]
 
 
 def _collect_switch_matches(matches: list[_RouteMatch], parsed: ParsedSource, statement: Node, owner_index: int, segment: RouteSegment) -> None:
@@ -389,7 +533,17 @@ def _loop_match(parsed: ParsedSource, statement: Node, owner_index: int, segment
     return _route_match(statement, owner_index, segment.kind, branch, header_end=branch)
 
 
-def _route_match(owner: Node, owner_index: int, kind: str, branch: Node, *, header_start: Node | None = None, header_end: Node | None = None, trim_end_byte: int | None = None, selected_start_byte: int | None = None) -> _RouteMatch:
+def _route_match(
+    owner: Node,
+    owner_index: int,
+    kind: str,
+    branch: Node,
+    *,
+    header_start: Node | None = None,
+    header_end: Node | None = None,
+    trim_end_byte: int | None = None,
+    selected_start_byte: int | None = None,
+) -> _RouteMatch:
     return _RouteMatch(
         owner=owner,
         owner_index=owner_index,
@@ -423,7 +577,23 @@ def _case_label(parsed: ParsedSource, case_node: Node) -> str | None:
     return None
 
 
-def _is_default_case(case_node: Node) -> bool: return bool(case_node.children) and case_node.children[0].type == "default"
+def _case_label_or_error(parsed: ParsedSource, case_node: Node) -> str:
+    label = _case_label(parsed, case_node)
+    if label is None:
+        raise CiftError("case label を特定できません")
+    return label
+
+
+def _is_default_case(case_node: Node) -> bool:
+    return bool(case_node.children) and case_node.children[0].type == "default"
+
+
+def _line_in_node(line_no: int, node: Node) -> bool:
+    return _line_in_range(line_no, node.start_point.row + 1, node.end_point.row + 1)
+
+
+def _line_in_range(line_no: int, start_line: int, end_line: int) -> bool:
+    return start_line <= line_no <= end_line
 
 
 def _normalized_if_condition(parsed: ParsedSource, if_node: Node) -> str:

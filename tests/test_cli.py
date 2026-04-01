@@ -40,6 +40,9 @@ def test_route_help_is_exposed_instead_of_path() -> None:
 
     assert route_result.exit_code == 0
     assert path_result.exit_code == 2
+    route_help = normalize_help_output(route_result.stdout)
+    assert "--route" in route_help
+    assert "--infer-from-line" in route_help
 
 
 def test_cli_version_prints_project_version() -> None:

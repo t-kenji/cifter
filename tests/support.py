@@ -263,6 +263,42 @@ AMBIGUOUS_CASE_SOURCE = """int AmbiguousCase(int x)
 }
 """
 
+INFER_NESTED_SOURCE = """int InferNested(int sts)
+{
+    switch (sts) {
+    case STS_IDLE:
+        while (sts > 0) {
+            if (sts == 1) {
+                Work();
+            }
+        }
+        break;
+    default:
+        break;
+    }
+}
+"""
+
+INFER_MULTILINE_SOURCE = """int InferMultiline(int value)
+{
+    while (
+        value > 0
+    ) {
+        if (
+            value == 1
+        ) {
+            Work();
+        }
+    }
+}
+"""
+
+AMBIGUOUS_LINE_ROUTE_SOURCE = """int AmbiguousLine(int x)
+{
+    if (x > 0) { First(); } else { Second(); }
+}
+"""
+
 PREPROCESS_SOURCE = """int Flagged(void)
 {
 #if defined(DEF_FOO)

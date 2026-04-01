@@ -8,7 +8,6 @@ from tests.support import (
     DUPLICATE_FUNCTION_SOURCE,
     ELSE_SOURCE,
     SOURCE,
-    normalize_help_output,
     runner,
     write_bytes_file,
     write_text_file,
@@ -118,13 +117,13 @@ def test_run_strict_inputs_fails_when_any_input_is_missing_target_symbol(tmp_pat
     assert payload["diagnostics"][0]["severity"] == "error"
 
 
-def test_route_requires_route_option(tmp_path: Path) -> None:
+def test_route_requires_route_or_infer_from_line_option(tmp_path: Path) -> None:
     source = write_text_file(tmp_path, "foo.c", SOURCE)
     result = runner.invoke(app, ["route", "FooFunction", str(source)])
 
-    assert result.exit_code == 2
-    normalized = normalize_help_output(result.output)
-    assert "--route" in normalized
+    assert result.exit_code == 1
+    assert "--route" in result.output
+    assert "--infer-from-line" in result.output
 
 
 def test_files_from_stdin_matches_direct_input(tmp_path: Path) -> None:

@@ -10,7 +10,7 @@ from tree_sitter import Node
 from cifter.errors import CiftError
 from cifter.extract_flow import extract_flow_node
 from cifter.extract_function import extract_function_node
-from cifter.extract_route import extract_route_node
+from cifter.extract_route import extract_route_node, infer_route_for_line
 from cifter.model import (
     SUPPORTED_SOURCE_EXTENSIONS,
     CommandName,
@@ -106,11 +106,23 @@ def run_route(
     defines: list[str],
     language: LanguageMode,
     routes: Sequence[str],
+    infer_from_line: int | None = None,
     strict_inputs: bool = False,
 ) -> RunResult:
+    if infer_from_line is not None:
+        if routes:
+            raise CiftError("--route と --infer-from-line は併用できません")
+        return _run_route_infer_from_line(
+            symbol,
+            inputs=inputs,
+            defines=defines,
+            language=language,
+            infer_from_line=infer_from_line,
+        )
+
     route_values = tuple(routes)
     if not route_values:
-        raise CiftError("空の --route は指定できません")
+        raise CiftError("--route または --infer-from-line を指定してください")
     parsed_routes = tuple(parse_route(route) for route in route_values)
     return _run_command(
         "route",
@@ -121,6 +133,51 @@ def run_route(
         routes=route_values,
         parsed_routes=parsed_routes,
         strict_inputs=strict_inputs,
+    )
+
+
+def _run_route_infer_from_line(
+    symbol: str,
+    *,
+    inputs: Sequence[Path],
+    defines: list[str],
+    language: LanguageMode,
+    infer_from_line: int,
+) -> RunResult:
+    if infer_from_line <= 0:
+        raise CiftError("--infer-from-line は 1 以上の行番号で指定してください")
+    if len(inputs) != 1:
+        raise CiftError("--infer-from-line は単一 input file のときだけ指定できます")
+
+    input_file = inputs[0]
+    parsed = parse_source(input_file, defines, language)
+    matches = find_functions(parsed, symbol)
+    if not matches:
+        raise CiftError(f"関数が見つかりません: {symbol}")
+
+    containing = tuple(function for function in matches if _node_contains_line(function, infer_from_line))
+    if not containing:
+        raise CiftError(f"行 {infer_from_line} を含む関数が見つかりません: {symbol}")
+    if len(containing) > 1:
+        raise CiftError(f"行 {infer_from_line} を含む同名関数が複数見つかりました: {symbol}")
+
+    inferred_route = infer_route_for_line(parsed, containing[0], infer_from_line)
+    parsed_routes = (parse_route(inferred_route),)
+    extraction = extract_route_node(parsed, containing[0], parsed_routes)
+    result = _build_extraction_item(
+        "route",
+        input_file,
+        symbol,
+        parsed,
+        extraction,
+        (inferred_route,),
+    )
+    return RunResult(
+        tool_version=get_version(),
+        command="route",
+        inputs=(input_file,),
+        results=(result,),
+        diagnostics=(),
     )
 
 
@@ -252,6 +309,12 @@ def _get_parsed_source(
     parsed = parse_source(path, list(defines), language)
     cache[key] = parsed
     return parsed
+
+
+def _node_contains_line(node: Node, line_no: int) -> bool:
+    start_line = node.start_point.row + 1
+    end_line = node.end_point.row + 1
+    return start_line <= line_no <= end_line
 
 
 def _read_input_specs(path_value: str, stdin_stream: object) -> tuple[Path, ...]:

@@ -29,10 +29,12 @@
 
 - 使いどころ: ある `if` の枝、ある `case` の枝だけを確認したい
 - 向いている場面: 条件分岐の一部だけを focused に読みたいとき
-- 形式: `cift route <symbol> [inputs...] --route <route>...`
+- 形式: `cift route <symbol> [inputs...] (--route <route>... | --infer-from-line <line>)`
 
 `route` は「分岐の通り道」を文字列で指定するコマンドです。
 詳細は [route-dsl.md](route-dsl.md) を参照してください。
+
+`--infer-from-line` を使うと、単一 file の中で指定行を含む最も深い branch path を推論して、その route をそのまま実行できます。
 
 ## 共通オプションの整理
 
