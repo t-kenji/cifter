@@ -55,7 +55,7 @@ def test_metadata_has_keywords() -> None:
 
 def test_metadata_has_classifiers() -> None:
     metadata = (
-        "Classifier: Development Status :: 3 - Alpha\n"
+        "Classifier: Development Status :: 4 - Beta\n"
         "Classifier: Environment :: Console\n"
         "Classifier: Intended Audience :: Developers\n"
         "Classifier: Operating System :: OS Independent\n"
@@ -66,7 +66,7 @@ def test_metadata_has_classifiers() -> None:
         "Classifier: Topic :: Software Development\n"
     )
     expected = [
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Environment :: Console",
         "Intended Audience :: Developers",
         "Operating System :: OS Independent",
