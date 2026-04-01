@@ -61,6 +61,8 @@ def test_metadata_has_classifiers() -> None:
         "Classifier: Operating System :: OS Independent\n"
         "Classifier: Programming Language :: Python :: 3\n"
         "Classifier: Programming Language :: Python :: 3.12\n"
+        "Classifier: Programming Language :: Python :: 3.13\n"
+        "Classifier: Programming Language :: Python :: 3.14\n"
         "Classifier: Programming Language :: C\n"
         "Classifier: Programming Language :: C++\n"
         "Classifier: Topic :: Software Development\n"
@@ -72,6 +74,8 @@ def test_metadata_has_classifiers() -> None:
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Programming Language :: C",
         "Programming Language :: C++",
         "Topic :: Software Development",

@@ -18,10 +18,12 @@
 
 ## CI 対象
 
-- 必須対象は Linux + Python 3.12 とする
-- Linux の必須 CI は `uv sync --frozen`、`uv run pytest`、`uv run ruff check .`、`uv run ty check .`、`uv build` を順に実行する
-- Linux の必須 CI は build 後に生成 `wheel` / `sdist` について配布名、`LICENSE` 同梱、MIT メタデータ、project URL、keywords、classifiers を検証する
-- Linux の必須 CI は build 後に生成 wheel をクリーンな仮想環境へ install し、`cift --help`、`python -m cifter --help`、`cift --version`、`python -m cifter --version`、実コマンド 1 本の smoke を行う
+- Linux の必須互換テストは Python 3.12、3.13、3.14 を対象とする
+- Linux の必須互換テストは各 Python で `uv sync --frozen`、`uv run pytest` を順に実行する
+- Linux の必須配布ゲートは Python 3.12 を対象とする
+- Linux の必須配布ゲートは `uv sync --frozen`、`uv run ruff check .`、`uv run ty check .`、`uv build` を順に実行する
+- Linux の必須配布ゲートは build 後に生成 `wheel` / `sdist` について配布名、`LICENSE` 同梱、MIT メタデータ、project URL、keywords、classifiers を検証する
+- Linux の必須配布ゲートは build 後に生成 wheel をクリーンな仮想環境へ install し、`cift --help`、`python -m cifter --help`、`cift --version`、`python -m cifter --version`、実コマンド 1 本の smoke を行う
 - Windows は追加対象とし、同じ wheel に対する install smoke で `cift --help`、`python -m cifter --help`、`cift --version`、`python -m cifter --version`、実コマンド 1 本を観測する
 - Windows の結果は互換性観測用であり、release の必須ゲートには含めない
 
@@ -44,7 +46,7 @@
 ## 公開フロー
 
 - release は `v*` tag push を起点に実行する
-- release 前に Linux の必須 CI ゲートを再実行する
+- release 前に Linux の必須配布ゲートを Python 3.12 で再実行する
 - release 作成時は対象 version の changelog 節が存在することを確認する
 - release workflow は Trusted Publishing により PyPI publish を行う
 - PyPI publish は build、配布物検証、install smoke 成功後に行う

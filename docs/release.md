@@ -6,7 +6,7 @@
 
 - 正本は [specs/release.md](specs/release.md)
 - release 対象の変更が `CHANGELOG.md` の `Unreleased` に整理されている
-- Linux の必須 CI が通る状態である
+- Linux の必須互換テストと必須配布ゲートが通る状態である
 - PyPI 側に GitHub Trusted Publisher が設定済みである
 
 ## release PR
@@ -14,18 +14,21 @@
 1. `pyproject.toml` の version を次の semver へ更新する
 2. `CHANGELOG.md` の `Unreleased` から対象項目を `## [X.Y.Z] - YYYY-MM-DD` 節へ移す
 3. release に伴って README、`docs/specs/`、`docs/` の更新が必要なら同じ PR に含める
-4. PR で Linux の必須 CI が通ることを確認する
+4. PR で Linux の `pytest` が Python 3.12、3.13、3.14 で通ることを確認する
+5. PR で Linux の Python 3.12 配布ゲートが通ることを確認する
 
 ## tag と公開
 
 1. release PR を merge する
 2. merge 済み commit に `vX.Y.Z` tag を作成して push する
-3. release workflow が version / changelog 整合、test、lint、type check、build、配布物検証、install smoke を再実行する
+3. release workflow が Python 3.12 で version / changelog 整合、test、lint、type check、build、配布物検証、install smoke を再実行する
 4. workflow が OIDC により PyPI へ publish する
 5. PyPI publish 成功後に GitHub Release へ `wheel` と `sdist` を添付する
 
 ## GitHub Actions メモ
 
+- PR / push の `ci` workflow では Linux の `pytest` を Python 3.12、3.13、3.14 の matrix で実行する
+- PR / push の `ci` workflow では lint、type check、build、配布物検証、install smoke、artifact upload を Python 3.12 の単一 job で実行する
 - release workflow では `id-token: write` を付与する
 - publish step は `pypa/gh-action-pypi-publish` を使う
 - GitHub Release 添付は PyPI publish 成功後に実行する
