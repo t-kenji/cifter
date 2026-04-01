@@ -1,6 +1,6 @@
 [project]
 name = "cifter-cli"
-version = "1.0.0"
+version = "1.1.0"
 description = "C/C++ ソースを高速に切り出す CLI"
 readme = "README.md"
 license = "MIT"
